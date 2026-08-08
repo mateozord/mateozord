@@ -1,0 +1,36 @@
+<svg width="1200" height="300" viewBox="0 0 1200 300" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <pattern id="grid" width="28" height="28" patternUnits="userSpaceOnUse">
+      <path d="M 28 0 L 0 0 0 28" fill="none" stroke="#151b17" stroke-width="1"/>
+    </pattern>
+    <linearGradient id="fade" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="55%" stop-color="#0a0d0b" stop-opacity="0"/>
+      <stop offset="100%" stop-color="#0a0d0b" stop-opacity="1"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1200" height="300" fill="#0a0d0b"/>
+  <rect width="1200" height="300" fill="url(#grid)"/>
+  <rect width="1200" height="300" fill="url(#fade)"/>
+
+  <!-- terminal window chrome -->
+  <circle cx="40" cy="36" r="6" fill="#2a332d"/>
+  <circle cx="60" cy="36" r="6" fill="#2a332d"/>
+  <circle cx="80" cy="36" r="6" fill="#2a332d"/>
+  <text x="104" y="41" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="14" fill="#5c6b60">~/mateus-fantin — zsh</text>
+  <line x1="40" y1="58" x2="1160" y2="58" stroke="#151b17" stroke-width="1"/>
+
+  <!-- prompt -->
+  <text x="40" y="118" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="16" fill="#c6ff5e">$ whoami</text>
+
+  <!-- name -->
+  <text x="40" y="172" font-family="'Segoe UI', system-ui, sans-serif" font-size="52" font-weight="700" fill="#f4f7f5">Mateus Fantin</text>
+
+  <!-- role line -->
+  <text x="40" y="208" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="19" fill="#9fb0a4">Front-end Developer Jr.<tspan fill="#4a5850"> · </tspan>Automation<tspan fill="#4a5850"> · </tspan>Data &amp; BI</text>
+
+  <!-- tagline -->
+  <text x="40" y="248" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="15" fill="#5c6b60">Transformo processos, dados e ideias em produtos digitais.<tspan fill="#c6ff5e">_</tspan></text>
+
+  <line x1="40" y1="266" x2="1160" y2="266" stroke="#151b17" stroke-width="1"/>
+</svg>
