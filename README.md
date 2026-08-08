@@ -48,15 +48,6 @@ Vim do turismo (CVC Corp) pra tecnologia — troquei prazos e negociação com f
 | 👁️ **[Vistamed](https://github.com/mateozord/vistamed)** | Redesign conceitual para clínica oftalmológica com agendamento via WhatsApp | [ver site](https://vistamednovo.netlify.app) |
 | 💼 **[Portfólio](https://github.com/mateozord/portifolio)** | Meu portfólio pessoal, reunindo os projetos acima | [ver site](https://mateusfantin.netlify.app) |
 
-### 📈 Estatísticas
-
-<div align="center">
-
-<img src="https://github-readme-stats.vercel.app/api?username=mateozord&show_icons=true&theme=tokyonight&hide_border=true&count_private=true" alt="Estatísticas do GitHub" height="165"/>
-<img src="https://github-readme-streak-stats.herokuapp.com/?user=mateozord&theme=tokyonight&hide_border=true" alt="Streak do GitHub" height="165"/>
-
-</div>
-
 <div align="center">
 
 *Aberto a oportunidades como Desenvolvedor(a) Júnior — front-end, automação de processos ou dados.*
