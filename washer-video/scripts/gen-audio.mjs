@@ -2,9 +2,11 @@
 // Same timing constants as src/timeline.ts (30 fps, 90 BPM => 20 frames per beat).
 import {writeFileSync, mkdirSync} from 'node:fs';
 
-const SR = 44100, FPS = 30, BEAT = 20, BAR = 80, TOTAL = 960;
-const S = {title: 0, fill: 80, wash: 160, motor: 320, drain: 400, spin: 480, slow: 640, done: 800, door: 840, outro: 880, end: 960};
-const washKicks = [200, 240, 280, 320];
+const SR = 44100, FPS = 30, BEAT = 20, BAR = 80, TOTAL = 1200;
+const S = {title: 0, fill: 80, wash: 240, motor: 480, side: 560, drain: 640, spin: 720, slow: 880, done: 1040, door: 1080, outro: 1120, end: 1200};
+const WASH_SLOW = [320, 400];
+const washKicks = [280, 320, 400, 440, 480];
+const inWS = (f) => f >= WASH_SLOW[0] && f < WASH_SLOW[1];
 const dropHits = [];
 for (let f = S.slow + 18; f < S.done - 6; f += 10) dropHits.push(f);
 
@@ -95,15 +97,15 @@ const CHORDS = [[53, 64, 67, 69, 72], [52, 62, 67, 71], [50, 60, 64, 65, 69], [4
 const ROOTS = [41, 40, 38, 33];
 for (let bar = 0; bar < TOTAL / BAR; bar++) {
   const f = bar * BAR, ch = CHORDS[bar % 4], r = ROOTS[bar % 4];
-  if (bar === 11) { rhodes(f, ch, 0.05, 2.6); rhodes(f + BEAT * 2.5, ch.slice(1), 0.03, 1.4); bass(f, r, 2.5, 0.22); continue; }
+  if (bar === S.outro / BAR) { rhodes(f, ch, 0.05, 2.6); rhodes(f + BEAT * 2.5, ch.slice(1), 0.03, 1.4); bass(f, r, 2.5, 0.22); continue; }
   rhodes(f, ch, 0.055);
   rhodes(f + BEAT * 2.5, ch.slice(1), 0.032, 1.3);
   if (bar >= 1) { bass(f, r, 1.2); bass(f + BEAT * 2, r, 0.5, 0.2); bass(f + BEAT * 2.5, r + 12, 0.3, 0.14); bass(f + BEAT * 3.5, r + 7, 0.25, 0.14); }
 }
 // ---------- drums ----------
 const sixteenth = BEAT / 4, swing = 0.028;
-for (let bar = 1; bar < 10; bar++) {
-  const f0 = bar * BAR, slow = f0 >= S.slow && f0 < S.done;
+for (let bar = 1; bar < S.done / BAR; bar++) {
+  const f0 = bar * BAR, slow = (f0 >= S.slow && f0 < S.done) || inWS(f0);
   if (slow) continue;
   const wash = f0 >= S.wash && f0 < S.motor;
   for (let st = 0; st < 16; st++) {
@@ -116,7 +118,7 @@ for (let bar = 1; bar < 10; bar++) {
   snare(f0 + BEAT, 0.32); snare(f0 + BEAT * 3, 0.32);
 }
 // in the wash scene the kick drum IS the clothes landing in the water
-for (const k of washKicks) thud(k, k === S.motor ? 0.8 : 1);
+for (const k of washKicks) thud(k, k === WASH_SLOW[1] ? 1.4 : k === S.motor ? 0.8 : 1);
 // bar 10 (spin-down): drums then drop out on beat 3
 { const f0 = S.done; kick(drums, f0, 0.8); snare(f0 + BEAT, 0.3); }
 
@@ -124,8 +126,8 @@ for (const k of washKicks) thud(k, k === S.motor ? 0.8 : 1);
 // title: door lock click
 for (const f of [64, 70]) { const s0 = fs(f); for (let i = 0; i < 900; i++) add(mach, s0 + i, noise() * Math.exp(-i / 120) * 0.35); }
 // fill: valve clunk + water hiss with gurgles
-{ const s0 = fs(96); for (let i = 0; i < 2500; i++) add(mach, s0 + i, Math.sin(2 * Math.PI * 70 * i / SR) * Math.exp(-i / 500) * 0.5 + noise() * Math.exp(-i / 200) * 0.2); }
-{ const a = fs(98), b = fs(158); let lp = 0, lp2 = 0;
+{ const s0 = fs(S.fill + 16); for (let i = 0; i < 2500; i++) add(mach, s0 + i, Math.sin(2 * Math.PI * 70 * i / SR) * Math.exp(-i / 500) * 0.5 + noise() * Math.exp(-i / 200) * 0.2); }
+{ const a = fs(S.fill + 18), b = fs(S.fill + 150); let lp = 0, lp2 = 0;
   for (let i = a; i < b; i++) {
     const t = (i - a) / SR, env = Math.min(1, t / 0.15) * Math.min(1, (b - i) / (SR * 0.15));
     lp += 0.18 * (noise() - lp); lp2 += 0.05 * (lp - lp2);
@@ -141,12 +143,12 @@ function hum(f0, f1, fn, amp) {
     mach[i] += (Math.sin(ph) + 0.5 * Math.sin(2 * ph) + 0.25 * Math.sin(3 * ph) + 0.12 * Math.sin(5 * ph)) * amp * env;
   }
 }
-const washSpeed = (f) => { const q = (f - S.wash) % BAR; return Math.min(1, q / 8, (BAR - q) / 8); };
+const washSpeed = (f) => Math.max(0, Math.min(1, (f - S.wash) / 8, Math.abs(f - WASH_SLOW[1]) / 8, (S.motor - f) / 8)) * (inWS(f) ? 0.5 : 1);
 hum(S.wash, S.motor, (f) => 38 + 30 * washSpeed(f), 0.05);
 hum(S.motor, S.drain, () => 62, 0.06);
 hum(S.motor, S.drain, () => 640, 0.008); // belt whine
 // water slosh between beats in the wash
-for (let f = S.wash + 10; f < S.motor; f += 20) { const s0 = fs(f); let lp = 0; for (let i = 0; i < SR * 0.25; i++) { lp += 0.08 * (noise() - lp); add(mach, s0 + i, lp * Math.sin(Math.PI * i / (SR * 0.25)) * 0.5); } }
+for (let f = S.wash + 10; f < S.motor; f += 20) { if (inWS(f)) continue; const s0 = fs(f); let lp = 0; for (let i = 0; i < SR * 0.25; i++) { lp += 0.08 * (noise() - lp); add(mach, s0 + i, lp * Math.sin(Math.PI * i / (SR * 0.25)) * 0.5); } }
 // drain pump buzz + bubbles that land on 16ths (pentatonic)
 { const a = fs(S.drain + 4), b = fs(S.drain + 74); let ph = 0;
   for (let i = a; i < b; i++) { ph += 2 * Math.PI * 100 / SR; const env = Math.min(1, (i - a) / 3000, (b - i) / 3000); mach[i] += Math.tanh(Math.sin(ph) * 3) * 0.035 * env; } }
@@ -183,6 +185,13 @@ for (let f = S.slow; f < S.done; f += BEAT) kick(mach, f, 0.6, 32, 70, 0.4);
 { const mel = [76, 74, 72, 69, 72, 74, 76, 79, 81, 79, 76, 74, 72, 74, 69];
   dropHits.forEach((f, k) => plink(f, mel[k % mel.length], 0.2)); }
 sweep(mach, S.done - 12, S.done + 1, 60, 900, 0.3, 0.4);
+// wash slow motion: whoosh down, underwater rumble, slow heartbeat, riser into the big splash
+sweep(mach, WASH_SLOW[0] - 4, WASH_SLOW[0] + 14, 800, 55, 0.3, 0.5);
+{ const a = fs(WASH_SLOW[0]), b = fs(WASH_SLOW[1]); let lp = 0, ph = 0;
+  for (let i = a; i < b; i++) { const t = (i - a) / SR; lp += 0.006 * (noise() - lp); ph += 2 * Math.PI * 40 / SR;
+    mach[i] += (lp * 2.2 * (0.6 + 0.4 * Math.sin(2 * Math.PI * t / 1.3)) + Math.sin(ph) * 0.05) * Math.min(1, t / 0.3, (b - i) / (SR * 0.1)); } }
+for (let f = WASH_SLOW[0]; f < WASH_SLOW[1]; f += BEAT) kick(mach, f, 0.5, 30, 65, 0.4);
+sweep(mach, WASH_SLOW[1] - 14, WASH_SLOW[1], 60, 700, 0.25, 0.5);
 // end-of-cycle beeps + door unlock
 beep(S.door + 2, 81); beep(S.door + 12, 81); beep(S.door + 22, 88, 0.45);
 { const s0 = fs(S.door + 30); for (let i = 0; i < 1500; i++) add(mach, s0 + i, noise() * Math.exp(-i / 150) * 0.4); }
@@ -195,7 +204,7 @@ const crackle = new Float32Array(N);
 // music bus: lo-fi lowpass (dark), heavy filter + duck in slow motion
 const musicBus = new Float32Array(N);
 for (let i = 0; i < N; i++) musicBus[i] = music[i] + drums[i];
-const slowAmt = (i) => { const f = (i / SR) * FPS; return clamp(Math.min((f - S.slow + 4) / 10, (S.done - f) / 8)); };
+const slowAmt = (i) => { const f = (i / SR) * FPS, w = (a, b) => clamp(Math.min((f - a + 4) / 10, (b - f) / 8)); return Math.max(w(S.slow, S.done), w(WASH_SLOW[0], WASH_SLOW[1])); };
 { let y = 0; for (let i = 0; i < N; i++) { const s = slowAmt(i), fc = 5200 * (1 - s) + 320 * s, a = 1 - Math.exp(-2 * Math.PI * fc / SR); y += a * (musicBus[i] - y); musicBus[i] = y * (1 - 0.72 * s); } }
 // simple echo on plinks
 { const d = Math.round(SR * (BEAT / FPS) * 0.75); for (let i = d; i < N; i++) plinks[i] += plinks[i - d] * 0.38; }

@@ -1,5 +1,5 @@
 import {drawText, textWidth} from './font';
-import {S, BAR, washKicks, dropHits, DROP_FLIGHT, clamp, ease, easeOut} from './timeline';
+import {S, WASH_SLOW, washCycles, washKicks, dropHits, DROP_FLIGHT, inSlow, clamp, ease, easeOut} from './timeline';
 
 export const W = 180;
 export const H = 320;
@@ -12,13 +12,15 @@ const P = {
 };
 
 let ctx: CanvasRenderingContext2D;
-let cam = {x: 90, y: 170, z: 1};
+let cam = {x: 90, y: 170, z: 1, r: 0};
 let dither = 1;
 const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
 const bay = (x: number, y: number) => (BAYER[(y & 3) * 4 + (x & 3)] + 0.5) / 16;
 const hash = (n: number) => { const s = Math.sin(n * 127.1 + 311.7) * 43758.5453; return s - Math.floor(s); };
-const sx = (x: number) => (x - cam.x) * cam.z + 90;
-const sy = (y: number) => (y - cam.y) * cam.z + 170;
+const sp = (x: number, y: number): [number, number] => {
+  const dx = x - cam.x, dy = y - cam.y, c = Math.cos(cam.r), s = Math.sin(cam.r);
+  return [(dx * c - dy * s) * cam.z + 90, (dx * s + dy * c) * cam.z + 170];
+};
 
 // ---------- raster primitives (all go through hline/vline so dithering works) ----------
 function hline(x0: number, x1: number, y: number, c: string) {
@@ -29,43 +31,36 @@ function hline(x0: number, x1: number, y: number, c: string) {
   if (dither >= 1) { ctx.fillRect(x0, y, x1 - x0, 1); return; }
   for (let x = x0; x < x1; x++) if (bay(x, y) < dither) ctx.fillRect(x, y, 1, 1);
 }
-function vline(x: number, y0: number, y1: number, c: string) {
-  if (x < 0 || x >= W) return;
-  y0 = Math.max(0, y0); y1 = Math.min(H, y1);
-  if (y1 <= y0) return;
-  ctx.fillStyle = c;
-  if (dither >= 1) { ctx.fillRect(x, y0, 1, y1 - y0); return; }
-  for (let y = y0; y < y1; y++) if (bay(x, y) < dither) ctx.fillRect(x, y, 1, 1);
-}
 function srect(x: number, y: number, w: number, h: number, c: string) { for (let yy = y; yy < y + h; yy++) hline(x, x + w, yy, c); }
 function rect(x: number, y: number, w: number, h: number, c: string) {
-  const x0 = Math.round(sx(x)), y0 = Math.round(sy(y));
-  const x1 = Math.max(x0 + 1, Math.round(sx(x + w))), y1 = Math.max(y0 + 1, Math.round(sy(y + h)));
-  srect(x0, y0, x1 - x0, y1 - y0, c);
+  if (cam.r !== 0) { poly([[x, y], [x + w, y], [x + w, y + h], [x, y + h]], c); return; }
+  const [ax, ay] = sp(x, y), [bx, by] = sp(x + w, y + h);
+  const x0 = Math.round(ax), y0 = Math.round(ay);
+  srect(x0, y0, Math.max(x0 + 1, Math.round(bx)) - x0, Math.max(y0 + 1, Math.round(by)) - y0, c);
 }
 function ellipse(cx: number, cy: number, rx: number, ry: number, c: string) {
-  const X = sx(cx), Y = sy(cy), RX = rx * cam.z, RY = ry * cam.z;
+  const [X, Y] = sp(cx, cy), RX = rx * cam.z, RY = ry * cam.z;
   for (let yy = Math.floor(Y - RY); yy <= Math.ceil(Y + RY); yy++) {
     const dy = (yy + 0.5 - Y) / RY;
     if (Math.abs(dy) > 1) continue;
     const h = RX * Math.sqrt(1 - dy * dy);
-    const a = Math.round(X - h), b = Math.max(a + 1, Math.round(X + h));
-    hline(a, b, yy, c);
+    const a = Math.round(X - h);
+    hline(a, Math.max(a + 1, Math.round(X + h)), yy, c);
   }
 }
 const disc = (cx: number, cy: number, r: number, c: string) => ellipse(cx, cy, r, r, c);
 function ring(cx: number, cy: number, r: number, t: number, c: string) {
-  const X = sx(cx), Y = sy(cy), RO = r * cam.z, RI = Math.max(0, (r - t) * cam.z);
+  const [X, Y] = sp(cx, cy), RO = r * cam.z, RI = Math.max(0, (r - t) * cam.z);
   for (let yy = Math.floor(Y - RO); yy <= Math.ceil(Y + RO); yy++) {
     const dy = yy + 0.5 - Y;
     if (Math.abs(dy) > RO) continue;
     const ho = Math.sqrt(RO * RO - dy * dy);
     if (Math.abs(dy) < RI) {
       const hi = Math.sqrt(RI * RI - dy * dy);
-      let a = Math.round(X - ho), b = Math.max(a + 1, Math.round(X - hi));
-      hline(a, b, yy, c);
-      a = Math.round(X + hi); b = Math.max(a + 1, Math.round(X + ho));
-      hline(a, b, yy, c);
+      let a = Math.round(X - ho);
+      hline(a, Math.max(a + 1, Math.round(X - hi)), yy, c);
+      a = Math.round(X + hi);
+      hline(a, Math.max(a + 1, Math.round(X + ho)), yy, c);
     } else {
       const a = Math.round(X - ho);
       hline(a, Math.max(a + 1, Math.round(X + ho)), yy, c);
@@ -73,7 +68,7 @@ function ring(cx: number, cy: number, r: number, t: number, c: string) {
   }
 }
 function poly(pts: number[][], c: string) {
-  const p = pts.map(([x, y]) => [sx(x), sy(y)]);
+  const p = pts.map(([x, y]) => sp(x, y));
   const ys = p.map((q) => q[1]);
   for (let yy = Math.floor(Math.min(...ys)); yy <= Math.ceil(Math.max(...ys)); yy++) {
     const yc = yy + 0.5, xs: number[] = [];
@@ -101,11 +96,23 @@ function sline(x0: number, y0: number, x1: number, y1: number, c: string, w = 1)
     if (e2 <= dx) { err += dx; y0 += sty; }
   }
 }
-const line = (x0: number, y0: number, x1: number, y1: number, c: string, w = 1) =>
-  sline(sx(x0), sy(y0), sx(x1), sy(y1), c, Math.max(1, Math.round(w * cam.z)));
+function line(x0: number, y0: number, x1: number, y1: number, c: string, w = 1) {
+  const a = sp(x0, y0), b = sp(x1, y1);
+  sline(a[0], a[1], b[0], b[1], c, Math.max(1, Math.round(w * cam.z)));
+}
 function dot(x: number, y: number, c: string, s = 1) {
-  const n = Math.max(1, Math.round(s * cam.z));
-  srect(Math.round(sx(x) - n / 2), Math.round(sy(y) - n / 2), n, n, c);
+  const n = Math.max(1, Math.round(s * cam.z)), [X, Y] = sp(x, y);
+  srect(Math.round(X - n / 2), Math.round(Y - n / 2), n, n, c);
+}
+function zig(ax: number, ay: number, bx: number, by: number) {
+  const n = 9, pts: number[][] = [];
+  const L = Math.hypot(bx - ax, by - ay), nx = -(by - ay) / L, ny = (bx - ax) / L;
+  for (let i = 0; i <= n; i++) {
+    const t = i / n, o = i === 0 || i === n ? 0 : i % 2 ? 3 : -3;
+    pts.push([ax + (bx - ax) * t + nx * o, ay + (by - ay) * t + ny * o]);
+  }
+  for (let i = 0; i < n; i++) line(pts[i][0], pts[i][1], pts[i + 1][0], pts[i + 1][1], P.ink, 3);
+  for (let i = 0; i < n; i++) line(pts[i][0], pts[i][1], pts[i + 1][0], pts[i + 1][1], P.copper, 1);
 }
 function pipe(pts: number[][], w: number, c: string) {
   for (let i = 0; i + 1 < pts.length; i++) line(pts[i][0], pts[i][1], pts[i + 1][0], pts[i + 1][1], P.ink, w + 2);
@@ -132,8 +139,8 @@ function omegaAt(f: number) {
   if (f < S.fill) return 0.03;
   if (f < S.wash) return 0;
   if (f < S.motor) {
-    const k = Math.floor((f - S.wash) / BAR), q = (f - S.wash) % BAR;
-    return (k % 2 === 0 ? 1 : -1) * 0.09 * Math.min(1, q / 8, (BAR - q) / 8);
+    const slow = f >= WASH_SLOW[0] && f < WASH_SLOW[1] ? 0.5 : 1;
+    return (f < WASH_SLOW[1] ? 1 : -1) * 0.09 * slow * Math.min(1, (f - S.wash) / 8, Math.abs(f - WASH_SLOW[1]) / 8, (S.motor - f) / 8);
   }
   if (f < S.drain) return 0.09;
   if (f < S.spin) return 0.035;
@@ -153,30 +160,40 @@ function rpmAt(f: number): number | null {
 }
 const fmt = (n: number) => (n >= 1000 ? `${Math.floor(n / 1000)}.${String(n % 1000).padStart(3, '0')}` : String(n));
 function waterY(f: number) {
-  if (f >= S.fill + 22 && f < S.drain) return 219 - 33 * ease((f - (S.fill + 22)) / 55);
+  if (f >= S.fill + 90 && f < S.drain) return 219 - 33 * ease((f - (S.fill + 90)) / 60);
   if (f >= S.drain && f < S.spin) return 186 + 34 * ease((f - (S.drain + 4)) / 66);
   return 999;
 }
 const lastKick = (f: number) => { let k = -999; for (const t of washKicks) if (t <= f) k = t; return k; };
 
-type Cam = [number, number, number, number];
+type Cam = number[]; // [frame, x, y, zoom, rotation?]
 const CAMS: Cam[] = [
   [0, 90, 170, 1], [60, 90, 170, 1], [80, 90, 184, 3.2],
-  [80, 60, 128, 1.6], [116, 60, 128, 1.6], [134, 90, 172, 1], [S.wash, 90, 172, 1], [176, 90, 172, 1.18], [S.motor, 90, 172, 1.3],
-  [S.motor, 90, 175, 1], [S.drain, 90, 178, 1.05],
-  [S.drain, 96, 190, 1.05], [416, 106, 198, 1.3], [S.spin, 106, 198, 1.3], [500, 90, 172, 1], [S.slow, 90, 172, 1],
-  [662, 128, 172, 1.9], [756, 128, 172, 1.9], [790, 90, 172, 1], [S.door, 90, 172, 1],
-  [S.door, 90, 172, 1], [S.outro, 90, 172, 1], [S.end, 90, 176, 1.08],
+  // fill: valve close-up -> follow the hose -> drawer -> into the tub -> level sensor
+  [80, 36, 112, 2.7], [118, 38, 110, 2.4], [140, 46, 100, 2.4], [158, 52, 104, 2.2], [178, 66, 140, 1.7], [198, 90, 172, 1.15], [212, 126, 158, 1.7], [238, 126, 150, 1.8],
+  // wash: slow push, slow-motion close-up following a falling cloth
+  [262, 90, 175, 1.1], [300, 90, 180, 1.3], [320, 90, 182, 1.4], [340, 90, 176, 2.1, -0.05], [392, 90, 184, 2.2, 0.03], [410, 90, 180, 1.3], [480, 90, 172, 1.15],
+  // motor (rear): start on the tiny pulley and ride the belt up
+  [480, 90, 228, 3.2], [500, 90, 226, 3.0], [532, 90, 190, 1.6], [560, 90, 165, 1.05],
+  // side view: shaft + bearings, then pull back
+  [560, 126, 172, 1.9], [600, 112, 174, 1.4], [640, 90, 175, 1.0],
+  // drain: track the water tub -> pump -> hose
+  [640, 90, 205, 1.6], [662, 104, 234, 2.6], [682, 112, 234, 2.6], [702, 150, 182, 1.8], [720, 150, 150, 1.6],
+  // spin: dutch angle, spring + damper close-ups
+  [744, 90, 172, 1.0], [790, 90, 172, 1.25, 0.05], [806, 44, 122, 2.2], [822, 46, 126, 2.1], [832, 54, 228, 2.2], [846, 56, 226, 2.1], [866, 90, 172, 1.1, -0.07], [880, 90, 172, 1.0],
+  // slow motion: slow orbit around the drops
+  [902, 128, 172, 1.9, 0.08], [960, 130, 170, 2.0, -0.04], [996, 128, 174, 2.1, 0.05], [1030, 90, 172, 1, 0], [S.door, 90, 172, 1],
+  [S.door, 90, 182, 1.25], [S.outro, 90, 172, 1], [S.end, 90, 176, 1.08],
 ];
 function camAt(f: number) {
   for (let i = CAMS.length - 2; i >= 0; i--) {
     const a = CAMS[i], b = CAMS[i + 1];
     if (f >= a[0] && a[0] !== b[0]) {
-      const t = ease((f - a[0]) / (b[0] - a[0]));
-      return {x: a[1] + (b[1] - a[1]) * t, y: a[2] + (b[2] - a[2]) * t, z: a[3] + (b[3] - a[3]) * t};
+      const t = ease((f - a[0]) / (b[0] - a[0])), ar = a[4] ?? 0, br = b[4] ?? 0;
+      return {x: a[1] + (b[1] - a[1]) * t, y: a[2] + (b[2] - a[2]) * t, z: a[3] + (b[3] - a[3]) * t, r: ar + (br - ar) * t};
     }
   }
-  return {x: 90, y: 170, z: 1};
+  return {x: 90, y: 170, z: 1, r: 0};
 }
 
 // ---------- clothes ----------
@@ -193,8 +210,8 @@ function clothPos(i: number, f: number): number[] {
   const c = CLOTHES[i], dist = 41 - c.r, base = Math.PI / 2 + c.land;
   const rest = polar(base, dist);
   if (f >= S.wash && f < S.motor) {
-    const start = S.wash + Math.floor((f - S.wash) / 40) * 40, p = (f - start) / 40;
-    const d = Math.floor((start - S.wash) / BAR) % 2 === 0 ? 1 : -1;
+    const cy = washCycles.find((q) => f >= q[0] && f < q[1])!;
+    const p = (f - cy[0]) / (cy[1] - cy[0]), d = cy[2];
     if (p < 0.6) return polar(base + d * c.lift * ease(p / 0.6), dist);
     const s = (p - 0.6) / 0.4, A = polar(base + d * c.lift, dist);
     return [A[0] + (rest[0] - A[0]) * s, A[1] + (rest[1] - A[1]) * s * s];
@@ -231,19 +248,11 @@ function cabinet(f: number) {
 function panelText(s: string, x: number, y: number, c: string) {
   const sc = Math.max(1, Math.round(cam.z));
   if (sc !== 1) return;
-  txt(s, Math.round(sx(x)), Math.round(sy(y)), 1, c);
+  const [X, Y] = sp(x, y);
+  txt(s, Math.round(X), Math.round(Y), 1, c);
 }
 function springsDampers(f: number) {
-  for (const [ax, ay, bx, by] of [[38, 107, CX - 33, CY - 33], [142, 107, CX + 33, CY - 33]]) {
-    const n = 9, pts: number[][] = [];
-    const L = Math.hypot(bx - ax, by - ay), nx = -(by - ay) / L, ny = (bx - ax) / L;
-    for (let i = 0; i <= n; i++) {
-      const t = i / n, o = i === 0 || i === n ? 0 : (i % 2 ? 3 : -3);
-      pts.push([ax + (bx - ax) * t + nx * o, ay + (by - ay) * t + ny * o]);
-    }
-    for (let i = 0; i < n; i++) line(pts[i][0], pts[i][1], pts[i + 1][0], pts[i + 1][1], P.ink, 3);
-    for (let i = 0; i < n; i++) line(pts[i][0], pts[i][1], pts[i + 1][0], pts[i + 1][1], P.copper, 1);
-  }
+  zig(38, 107, CX - 33, CY - 33); zig(142, 107, CX + 33, CY - 33);
   for (const [ax, ay, bx, by] of [[CX - 26, CY + 43, 44, 244], [CX + 26, CY + 43, 136, 244]]) {
     const mx = (ax + bx) / 2, my = (ay + by) / 2;
     line(ax, ay, mx, my, P.ink, 3); line(ax, ay, mx, my, P.steelL, 1);
@@ -255,7 +264,7 @@ function inletAndDrain(f: number) {
   // inlet hose + solenoid valve + drawer hose
   pipe([[-60, 113], [30, 113]], 3, P.rubber);
   rect(29, 107, 14, 12, P.ink); rect(30, 108, 12, 10, P.steel);
-  const open = f >= 96 && f < 158;
+  const open = f >= S.fill + 16 && f < S.fill + 150;
   rect(32, 109, 8, 6, P.copper); for (let y = 110; y < 115; y += 2) rect(32, y, 8, 1, '#a0521c');
   rect(35, open ? 103 : 105, 2, 4, P.steelL); // plunger lifts when energised
   pipe([[36, 107], [36, 102]], 2, P.steelD);
@@ -263,12 +272,16 @@ function inletAndDrain(f: number) {
   if (open) {
     flow([[-60, 113], [36, 113], [36, 102]], f, P.waterL, 1.6);
     flow([[54, 102], [54, 112], [64, 127]], f, P.waterL, 1.6);
-    if (f > 104) for (let i = 0; i < 3; i++) { const t = ((f * 1.3 + i * 9) % 28) / 28; dot(54 + (i === 1 ? 3 : 0), 102 + t * 10, P.white, 1); }
+    if (f > S.fill + 40) for (let i = 0; i < 3; i++) { const t = ((f * 1.3 + i * 9) % 28) / 28; dot(54 + (i === 1 ? 3 : 0), 102 + t * 10, P.white, 1); }
     // falling stream into the tub
     const top = 128, bottom = Math.min(waterY(f), 214);
-    for (let y = top; y < bottom; y += 1) if ((y + f * 3) % 5 < 3) dot(66 + Math.sin(y * 0.4) * 0.6, y, P.waterL, 1.4);
+    if (f > S.fill + 70) for (let y = top; y < bottom; y += 1) if ((y + f * 3) % 5 < 3) dot(66 + Math.sin(y * 0.4) * 0.6, y, P.waterL, 1.4);
     if (f % 8 < 4) { dot(70, 108, P.yellow, 1); dot(72, 106, P.yellow, 1); }
   }
+  // level sensor (pressure switch) + its air tube
+  pipe([[126, 208], [134, 208], [134, 117]], 1, P.steelL);
+  rect(127, 108, 14, 9, P.ink); rect(128, 109, 12, 7, P.teal);
+  if (f >= S.fill + 122 && f < S.fill + 150 && f % 6 < 3) dot(134, 112, P.yellow, 2);
   // drain pipe + pump + outlet hose
   const pumping = f >= S.drain + 4 && f < S.drain + 74;
   pipe([[CX, 222], [CX, 236], [101, 236]], 3, P.rubber);
@@ -297,19 +310,18 @@ function tubAndDrum(f: number, clothesOn = true) {
   const kAmp = f >= S.wash && f < S.motor + 6 ? 3 * Math.exp(-(f - lastKick(f)) / 7) : 0;
   const drawWater = (alpha: number) => {
     if (wy > 218) return;
-    const X = sx(CX), Y = sy(CY), R = 47 * cam.z, YW = sy(wy);
-    dither = alpha;
-    for (let x = Math.floor(X - R); x <= Math.ceil(X + R); x++) {
-      const dx = x + 0.5 - X;
-      if (Math.abs(dx) > R) continue;
-      const h = Math.sqrt(R * R - dx * dx), u = (x - X) / cam.z;
-      const surf = Math.round(YW + (kAmp * Math.sin(u * 0.25 + f * 0.5) + 0.8 * Math.sin(u * 0.13 - f * 0.12)) * cam.z);
-      const top = Math.max(surf, Math.round(Y - h)), bot = Math.round(Y + h);
-      if (bot <= top) continue;
-      vline(x, top, bot, P.water);
-      vline(x, top, Math.min(bot, top + Math.max(1, Math.round(cam.z))), P.waterL);
-      if (alpha >= 1 && f >= S.wash && f < S.motor && hash(x * 3.1 + Math.floor(f / 5)) < 0.18) vline(x, top - 1, top, P.white);
+    const R = 47, half = Math.sqrt(R * R - (wy - CY) * (wy - CY));
+    const surf: number[][] = [];
+    for (let x = CX - half; x <= CX + half + 0.01; x += 1.5) {
+      const u = x - CX, edge = clamp((half - Math.abs(u)) / 6);
+      surf.push([x, wy + (kAmp * Math.sin(u * 0.25 + f * 0.5) + 0.8 * Math.sin(u * 0.13 - f * 0.12)) * edge]);
     }
+    const a0 = Math.atan2(wy - CY, half), arc: number[][] = [];
+    for (let a = a0; a <= Math.PI - a0; a += 0.08) arc.push(polar(a, R));
+    dither = alpha;
+    poly([...surf, ...arc], P.water);
+    for (let i = 0; i + 1 < surf.length; i++) line(surf[i][0], surf[i][1], surf[i + 1][0], surf[i + 1][1], P.waterL, 1);
+    if (alpha >= 1 && f >= S.wash && f < S.motor) surf.forEach(([x, y], i) => { if (hash(i * 3.1 + Math.floor(f / 5)) < 0.22) dot(x, y - 1, P.white, 1); });
     dither = 1;
   };
   drawWater(1);
@@ -328,8 +340,9 @@ function tubAndDrum(f: number, clothesOn = true) {
   // splash after clothes land on the beat
   if (f >= S.wash && f < S.motor + 8) {
     const k = lastKick(f), dt = f - k;
-    if (k > 0 && dt < 12) for (let i = 0; i < 10; i++) {
-      const vx = (hash(k + i) - 0.5) * 2.6, vy = -1.4 - hash(k * 2 + i) * 1.6;
+    const big = k === WASH_SLOW[1];
+    if (k > 0 && dt < (big ? 18 : 12)) for (let i = 0; i < (big ? 24 : 10); i++) {
+      const vx = (hash(k + i) - 0.5) * (big ? 3.4 : 2.6), vy = -1.4 - hash(k * 2 + i) * (big ? 2.4 : 1.6);
       const x = CX - 10 + hash(k * 3 + i) * 20 + vx * dt, y = wy + vy * dt + 0.16 * dt * dt;
       if (y < wy + 1) dot(x, y, i % 3 ? P.waterL : P.white, 1.5);
     }
@@ -411,6 +424,31 @@ function rearView(f: number) {
   dither = 0.5; ring(C2[0], C2[1], r - 1.5, 1, P.steelD); dither = 1;
   disc(C2[0], C2[1], 1.5, P.ink);
 }
+function sideView(f: number) {
+  rect(22, 88, 136, 162, P.ink); rect(24, 90, 132, 158, P.cream); rect(24, 90, 6, 158, P.creamD);
+  rect(30, 106, 120, 138, P.dark); rect(24, 104, 132, 2, P.ink);
+  for (let x = 36; x < 150; x += 12) rect(x, 106, 1, 138, '#181e3d');
+  rect(28, 250, 10, 4, P.ink); rect(142, 250, 10, 4, P.ink);
+  ellipse(25, 172, 8, 32, P.ink); ellipse(25, 172, 6, 30, P.steel); ellipse(26, 172, 3, 24, P.glass);
+  zig(52, 107, 60, 123); zig(112, 107, 104, 123);
+  for (const [ax, bx] of [[60, 50], [104, 114]]) { line(ax, 222, bx, 244, P.ink, 6); line(ax, 222, bx, 244, P.teal, 4); }
+  const th = TH[f];
+  rect(38, 121, 86, 103, P.ink); rect(40, 123, 82, 99, P.steelD); rect(40, 123, 82, 2, P.steel);
+  rect(44, 128, 74, 89, P.steelDD);
+  const off = (((th * 41) % 8) + 8) % 8;
+  for (let y = 120 + off; y < 216; y += 8) if (y > 129) for (let x = 48; x < 116; x += 8) dot(x, y, '#252a55', 1.5);
+  for (let k = 0; k < 3; k++) {
+    const a = th + (k * TAU) / 3, y = 172 + Math.sin(a) * 40;
+    if (Math.cos(a) > 0) { rect(46, y - 2, 70, 5, P.ink); rect(46, y - 1, 70, 3, P.steelL); } else { dither = 0.4; rect(46, y - 1, 70, 3, P.steel); dither = 1; }
+  }
+  rect(122, 169, 18, 6, P.ink); rect(122, 170, 18, 4, P.steelL);
+  for (const x of [124, 131]) { rect(x, 164, 5, 16, P.ink); rect(x + 1, 165, 3, 14, P.copper); }
+  rect(139, 124, 7, 96, P.ink); rect(140, 125, 5, 94, P.steel); rect(142, 125, 1, 94, P.steelD);
+  rect(68, 226, 70, 16, P.ink); rect(70, 228, 66, 12, P.steelD);
+  for (let x = 73; x < 134; x += 4) rect(x, 228, 1, 12, P.steelDD);
+  rect(136, 231, 4, 6, P.ink); rect(139, 228, 7, 12, P.ink); rect(140, 229, 5, 10, P.steelL);
+  for (let y = 121; y < 241; y++) rect(141, y, 3, 1, ((((y + f * 4.2) % 8) + 8) % 8) < 4 ? P.orange : '#8a3a1c');
+}
 function frontMachine(f: number, open: number, display: string) {
   ellipse(90, 252, 64, 4, '#11152c');
   rect(34, 98, 112, 152, P.ink); rect(36, 100, 108, 148, P.cream); rect(138, 100, 6, 148, P.creamD);
@@ -475,26 +513,32 @@ type Cap = [number, string, string];
 const CAPS: Cap[] = [
   [10, 'COMO UMA MÁQUINA DE LAVAR', 'FUNCIONA POR DENTRO?'],
   [86, 'A PLACA ABRE A VÁLVULA', 'SOLENOIDE (UM ÍMÃ ELÉTRICO)'],
-  [122, 'A ÁGUA PASSA PELA GAVETA', 'E LEVA O SABÃO JUNTO'],
-  [164, 'AS PÁS DO TAMBOR LEVANTAM', 'A ROUPA ATÉ O ALTO...'],
-  [204, '...E ELA CAI NA ÁGUA.', 'É ESSE TOMBO QUE LAVA!'],
-  [244, 'O TAMBOR GIRA PRA UM LADO,', 'PARA, E GIRA PRO OUTRO'],
-  [284, 'ASSIM A ROUPA NÃO ENROLA', 'E O SABÃO ENTRA NO TECIDO'],
-  [324, 'O MOTOR GIRA RÁPIDO, MAS', 'COM POUCA FORÇA'],
-  [362, 'A POLIA GRANDE É 10X MAIOR:', 'GIRA DEVAGAR COM MUITA FORÇA'],
-  [404, 'A BOMBA DE DRENAGEM PUXA', 'A ÁGUA SUJA PELO FUNDO'],
-  [442, 'E MANDA PELA MANGUEIRA', 'DIRETO PRO ESGOTO'],
-  [484, 'AGORA O TAMBOR ACELERA ATÉ', '1.200 VOLTAS POR MINUTO'],
-  [524, 'A ROUPA GRUDA NA PAREDE', 'E A ÁGUA SAI PELOS FUROS'],
-  [564, 'MOLAS E AMORTECEDORES', 'SEGURAM A TREMEDEIRA'],
-  [604, 'VAMOS VER ISSO EM', 'CÂMERA LENTA...'],
-  [644, 'CADA VOLTA DURA SÓ', '0,05 SEGUNDO'],
-  [684, 'A FORÇA NA ROUPA CHEGA A', 'QUASE 400X A GRAVIDADE'],
-  [724, 'CADA GOTA SAI EM LINHA RETA', '(INÉRCIA) PELOS FURINHOS'],
-  [764, 'BATE NO TANQUE E ESCORRE', 'ATÉ A BOMBA'],
-  [804, 'O MOTOR DESACELERA', 'E O TAMBOR PARA...'],
-  [844, 'A TRAVA SOLTA E A ROUPA', 'SAI SÓ UM POUCO ÚMIDA'],
-  [884, 'ENCHE, LAVA, DRENA', 'E CENTRIFUGA. SIMPLES!'],
+  [126, 'A ÁGUA CORRE PELA MANGUEIRA', 'ATÉ A GAVETA DO SABÃO'],
+  [166, 'ELA ARRASTA O SABÃO', 'E CAI DENTRO DO TANQUE'],
+  [204, 'UM SENSOR MEDE O NÍVEL', 'E FECHA A VÁLVULA NA HORA'],
+  [244, 'AS PÁS DO TAMBOR LEVANTAM', 'A ROUPA ATÉ O ALTO...'],
+  [284, '...E ELA CAI NA ÁGUA.', 'É ESSE TOMBO QUE LAVA!'],
+  [324, 'EM CÂMERA LENTA: A PÁ', 'SOLTA A ROUPA LÁ EM CIMA'],
+  [362, 'A QUEDA EMPURRA A ÁGUA', 'COM SABÃO PELO TECIDO'],
+  [404, 'O TAMBOR PARA E GIRA', 'PRO OUTRO LADO'],
+  [444, 'ASSIM A ROUPA NÃO ENROLA', 'E LAVA POR IGUAL'],
+  [484, 'O MOTOR GIRA RÁPIDO, MAS', 'COM POUCA FORÇA'],
+  [522, 'A POLIA GRANDE É 10X MAIOR:', 'GIRA DEVAGAR COM MUITA FORÇA'],
+  [564, 'DE LADO: A POLIA FICA PRESA', 'NO EIXO, ATRÁS DO TAMBOR'],
+  [604, 'ROLAMENTOS DEIXAM O EIXO', 'GIRAR LISO, SEM ATRITO'],
+  [644, 'A BOMBA DE DRENAGEM PUXA', 'A ÁGUA SUJA PELO FUNDO'],
+  [682, 'E MANDA PELA MANGUEIRA', 'DIRETO PRO ESGOTO'],
+  [724, 'AGORA O TAMBOR ACELERA ATÉ', '1.200 VOLTAS POR MINUTO'],
+  [764, 'A ROUPA GRUDA NA PAREDE', 'E A ÁGUA SAI PELOS FUROS'],
+  [804, 'MOLAS E AMORTECEDORES', 'SEGURAM A TREMEDEIRA'],
+  [844, 'VAMOS VER ISSO EM', 'CÂMERA LENTA...'],
+  [884, 'CADA VOLTA DURA SÓ', '0,05 SEGUNDO'],
+  [924, 'A FORÇA NA ROUPA CHEGA A', 'QUASE 400X A GRAVIDADE'],
+  [964, 'CADA GOTA SAI EM LINHA RETA', '(INÉRCIA) PELOS FURINHOS'],
+  [1004, 'BATE NO TANQUE E ESCORRE', 'ATÉ A BOMBA'],
+  [1044, 'O MOTOR DESACELERA', 'E O TAMBOR PARA...'],
+  [1084, 'A TRAVA SOLTA E A ROUPA', 'SAI SÓ UM POUCO ÚMIDA'],
+  [1124, 'ENCHE, LAVA, DRENA', 'E CENTRIFUGA. SIMPLES!'],
 ];
 function caption(f: number) {
   let cur: Cap | null = null;
@@ -530,8 +574,8 @@ function label(f: number, l: Lab) {
   if (f < a || f >= b) return;
   const n = clamp(Math.floor((f - a) * 2), 0, s.length);
   const w = textWidth(s, 1), bx = lx, by = ly;
-  const [wx, wy] = tgt();
-  const tx = Math.round(sx(wx)), ty = Math.round(sy(wy));
+  const [wx, wy] = tgt(), [X, Y] = sp(wx, wy);
+  const tx = Math.round(X), ty = Math.round(Y);
   const ex = clamp(tx, bx, bx + w + 4), ey = ty < by ? by - 1 : by + 13;
   sline(ex, ey, tx, ty, P.ink, 3);
   sline(ex, ey, tx, ty, P.yellow, 1);
@@ -542,27 +586,40 @@ function label(f: number, l: Lab) {
 const paddleTip = (f: number) => polar(TH[f] + 0, 36);
 const LABELS: Lab[] = [
   [92, S.wash, 'VÁLVULA', () => [36, 112], 8, 200],
-  [104, S.wash, 'GAVETA DO SABÃO', () => [45, 97], 84, 70],
-  [132, S.wash, 'TANQUE', () => [CX + 35, CY + 35], 120, 238],
-  [170, S.motor, 'PÁ', () => paddleTip(curF), 8, 232],
-  [176, S.motor, 'TAMBOR', () => [CX + 31, CY - 31], 124, 70],
-  [330, S.drain, 'MOTOR', () => [70, 229], 8, 238],
-  [338, S.drain, 'CORREIA', () => [42, 175], 6, 112],
-  [346, S.drain, 'POLIA', () => [116, 130], 132, 70],
-  [410, S.spin, 'BOMBA', () => [108, 236], 20, 238],
-  [424, S.spin, 'MANGUEIRA', () => [150, 160], 112, 86],
-  [526, 600, 'FUROS', () => polar(-0.8, 44), 130, 70],
-  [566, S.slow, 'MOLA', () => [42, 118], 8, 70],
-  [570, S.slow, 'AMORTECEDOR', () => [52, 236], 6, 226],
-  [688, 724, '~400 G', () => clothPos(0, curF), 6, 226],
+  [130, 206, 'GAVETA DO SABÃO', () => [45, 97], 84, 70],
+  [180, S.wash, 'TANQUE', () => [CX + 35, CY + 35], 120, 238],
+  [212, S.wash, 'SENSOR DE NÍVEL', () => [134, 112], 20, 80],
+  [250, WASH_SLOW[0], 'PÁ', () => paddleTip(curF), 8, 232],
+  [256, WASH_SLOW[0], 'TAMBOR', () => [CX + 31, CY - 31], 124, 70],
+  [366, WASH_SLOW[1], 'QUEDA LIVRE', () => clothPos(0, curF), 8, 226],
+  [486, S.side, 'MOTOR', () => [70, 229], 8, 238],
+  [492, S.side, 'POLIA DO MOTOR', () => [90, 228], 90, 206],
+  [512, S.side, 'CORREIA', () => [42, 175], 6, 112],
+  [534, S.side, 'POLIA GRANDE', () => [116, 130], 100, 70],
+  [568, S.drain, 'EIXO', () => [128, 172], 124, 90],
+  [576, S.drain, 'ROLAMENTOS', () => [126, 178], 100, 230],
+  [586, S.drain, 'POLIA', () => [142, 140], 140, 110],
+  [600, S.drain, 'TAMBOR', () => [80, 172], 8, 90],
+  [612, S.drain, 'MOTOR', () => [100, 233], 8, 238],
+  [652, S.spin, 'BOMBA', () => [108, 236], 20, 238],
+  [692, S.spin, 'MANGUEIRA', () => [150, 170], 112, 86],
+  [766, 800, 'FUROS', () => polar(-0.8, 44), 130, 70],
+  [806, S.slow, 'MOLA', () => [47, 124], 120, 80],
+  [830, S.slow, 'AMORTECEDOR', () => [52, 236], 100, 226],
+  [928, 964, '~400 G', () => clothPos(0, curF), 6, 226],
 ];
 let curF = 0;
 
 // ---------- frame ----------
 export function drawFrame(c: CanvasRenderingContext2D, f: number) {
   ctx = c; curF = f; dither = 1;
-  cam = camAt(f);
   CX = 90; CY = 172;
+  cam = camAt(f);
+  if (f >= WASH_SLOW[0] && f < WASH_SLOW[1] + 10) { // follow the hero cloth in slow motion
+    const w = 0.55 * Math.min(ease((f - WASH_SLOW[0]) / 16), ease((WASH_SLOW[1] + 10 - f) / 10));
+    const p = clothPos(0, Math.min(f, WASH_SLOW[1] - 1));
+    cam.x += (p[0] - cam.x) * w; cam.y += (p[1] - cam.y) * w;
+  }
   const om = omegaAt(f);
   if (f >= S.spin && f < S.slow && om > 0.35) { CX += Math.round((hash(f) - 0.5) * 2 * ((om - 0.35) / 0.27)); CY += Math.round((hash(f + 9) - 0.5) * 2); }
   ctx.fillStyle = P.bg; ctx.fillRect(0, 0, W, H);
@@ -575,9 +632,14 @@ export function drawFrame(c: CanvasRenderingContext2D, f: number) {
   else if (f < S.motor || (f >= S.drain && f < S.door)) {
     cabinet(f); springsDampers(f); inletAndDrain(f); tubAndDrum(f);
     if (f >= S.door - 40 && f < S.door) panelText('...', 112, 95, P.teal);
-  } else if (f < S.drain) rearView(f);
+  } else if (f < S.side) rearView(f);
+  else if (f < S.drain) sideView(f);
   else frontMachine(f, f >= S.outro ? 1 : ease((f - S.door - 14) / 16), f % 20 < 12 || f >= S.outro ? 'END' : '');
   // slow motion drops -> melody
+  if (inSlow(f)) {
+    ctx.fillStyle = 'rgba(0,0,0,0.13)';
+    for (let y = 62; y < 258; y += 2) ctx.fillRect(0, y, W, 1);
+  }
   if (f >= S.slow && f < S.done) {
     dropHits.forEach((h, k) => {
       const e = h - DROP_FLIGHT;
@@ -599,23 +661,20 @@ export function drawFrame(c: CanvasRenderingContext2D, f: number) {
           const a = phi + Math.PI + (i - 1.5) * 0.5;
           dot(hp[0] + Math.cos(a) * dt * 0.5, hp[1] + Math.sin(a) * dt * 0.5 + dt * dt * 0.02, P.white, 1);
         }
-        const nx = Math.round(sx(hp[0])) + 4, ny = Math.round(sy(hp[1])) - 10 - dt * 2;
+        const [hx, hy] = sp(hp[0], hp[1]), nx = Math.round(hx) + 4, ny = Math.round(hy) - 10 - dt * 2;
         dither = 1 - dt / 12;
         txt('♪', nx, ny, 1, P.yellow);
         dither = 1;
       }
     });
-    if (f >= 724 && f < 764) {
+    if (f >= 964 && f < 1004) {
       const x = 136.5, y0 = 150, y1 = 186;
       line(x, y0, x, y1, P.ink, 3); line(x, y0, x, y1, P.yellow, 1);
       poly([[x - 3, y1 - 3], [x + 3, y1 - 3], [x, y1 + 2]], P.yellow);
-      const tx = Math.round(sx(x)) - 50, ty = Math.round(sy(y0)) - 2;
+      const [ix, iy] = sp(x, y0), tx = Math.round(ix) - 50, ty = Math.round(iy) - 2;
       srect(tx - 1, ty - 1, textWidth('INÉRCIA', 1) + 6, 15, P.yellow); srect(tx, ty, textWidth('INÉRCIA', 1) + 4, 13, P.ink);
       txt('INÉRCIA', tx + 2, ty + 4, 1, P.white);
     }
-    // scanlines for the slow-mo look
-    ctx.fillStyle = 'rgba(0,0,0,0.13)';
-    for (let y = 62; y < 258; y += 2) ctx.fillRect(0, y, W, 1);
   }
   for (const l of LABELS) label(f, l);
   ctx.restore();
@@ -628,12 +687,12 @@ export function drawFrame(c: CanvasRenderingContext2D, f: number) {
     txt('MÁQUINA', 90, 38 + d1, 4, P.cream, {shadow: P.orange, outline: P.ink, align: 'center'});
     if (f >= 8) txt('DE LAVAR', 90, 72 + d2, 3, P.yellow, {shadow: '#b8620f', outline: P.ink, align: 'center'});
   } else if (f < S.wash) header(f, S.fill, 'PASSO 1/5', 'A ÁGUA ENTRA', 'VÁLVULA + SABÃO');
-  else if (f < S.motor) header(f, S.wash, 'PASSO 2/5', 'LAVAGEM', 'PÁS + TAMBOR');
-  else if (f < S.drain) header(f, S.motor, 'PASSO 3/5', 'MOTOR', 'CORREIA + POLIAS');
+  else if (f < S.motor) header(f, S.wash, inSlow(f) ? 'SLOW MOTION' : 'PASSO 2/5', 'LAVAGEM', 'PÁS + TAMBOR');
+  else if (f < S.side) header(f, S.motor, 'PASSO 3/5', 'MOTOR', 'CORREIA + POLIAS');
+  else if (f < S.drain) header(f, S.side, 'PASSO 3/5', 'VISTA LATERAL', 'EIXO + ROLAMENTOS');
   else if (f < S.spin) header(f, S.drain, 'PASSO 4/5', 'DRENAGEM', "BOMBA D'ÁGUA");
   else if (f < S.door) {
     header(f, S.spin, f >= S.slow && f < S.done ? 'SLOW MOTION' : 'PASSO 5/5', 'CENTRÍFUGA', f >= S.done ? 'DESACELERANDO...' : 'FORÇA CENTRÍFUGA');
-    if (f >= S.slow && f < S.done && f % 30 < 20) srect(4, 4, 2, 2, P.red);
   } else if (f < S.outro) {
     const t = f - S.door;
     if (t >= 16) { const d = Math.round(-30 * (1 - easeOut((t - 16) / 8))); txt('PRONTO!', 90, 30 + d, 4, P.cream, {shadow: P.orange, outline: P.ink, align: 'center'}); }
@@ -644,14 +703,15 @@ export function drawFrame(c: CanvasRenderingContext2D, f: number) {
     txt('SABE!', 90, 44 + d, 4, P.yellow, {shadow: P.orange, outline: P.ink, align: 'center'});
   }
   if (f >= S.fill && f < S.door) rpmCounter(f);
+  if (inSlow(f) && f % 30 < 20) srect(2, 2, 3, 3, P.red);
   caption(f);
   progress(f);
 
   // transitions (ordered-dither wipes) + fades
   let cover = 0, coverC = P.ink;
-  for (const b of [S.fill, S.motor, S.drain, S.door]) cover = Math.max(cover, 1 - Math.abs(f - b) / 6);
+  for (const b of [S.fill, S.motor, S.side, S.drain, S.door]) cover = Math.max(cover, 1 - Math.abs(f - b) / 6);
   cover = Math.max(cover, 1 - f / 6, (f - (S.end - 24)) / 24);
-  if (f >= S.slow && f < S.slow + 6) { cover = Math.max(cover, 1 - (f - S.slow) / 6) * 0.8; coverC = P.creamL; }
+  for (const b of [S.slow, WASH_SLOW[0]]) if (f >= b && f < b + 6) { cover = Math.max(cover, (1 - (f - b) / 6) * 0.8); coverC = P.creamL; }
   if (cover > 0) {
     ctx.fillStyle = coverC;
     for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (bay(x, y) < cover) ctx.fillRect(x, y, 1, 1);
