@@ -1,4 +1,4 @@
-import {drawText, textWidth} from './font';
+import {drawText, textWidth} from '../../_shared/font';
 import {S, WASH_SLOW, washCycles, washKicks, dropHits, DROP_FLIGHT, inSlow, clamp, ease, easeOut} from './timeline';
 
 export const W = 180;

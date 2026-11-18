@@ -1,0 +1,9 @@
+{
+  "name": "micro-video",
+  "private": true,
+  "scripts": {
+    "audio": "node scripts/gen-audio.mjs",
+    "studio": "../node_modules/.bin/remotion studio",
+    "render": "npm run audio && ../node_modules/.bin/remotion render MICRO out/micro-ondas.mp4"
+  }
+}

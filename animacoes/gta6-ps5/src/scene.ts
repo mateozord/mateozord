@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import {S, CLACK, SINK, LIQUID, clamp, ease, sixteenth} from './timeline';
-import {drawText} from './font';
+import {drawText} from '../../_shared/font';
 
 export const RW = 270, RH = 480;
 THREE.ColorManagement.enabled = false;

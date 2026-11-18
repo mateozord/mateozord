@@ -1,4 +1,4 @@
-import {drawText, textWidth, TextOpts} from './font';
+import {drawText, textWidth, TextOpts} from '../../_shared/font';
 import {S, BUTTONS, clamp, easeOut, factorAt, rpmRealAt} from './timeline';
 import type {FanScene} from './scene';
 

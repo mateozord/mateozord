@@ -1,0 +1,9 @@
+{
+  "name": "ps5-video",
+  "private": true,
+  "scripts": {
+    "audio": "node scripts/gen-audio.mjs",
+    "studio": "../node_modules/.bin/remotion studio",
+    "render": "npm run audio && ../node_modules/.bin/remotion render PS5 out/gta6-no-ps5.mp4"
+  }
+}

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import {RoundedBoxGeometry} from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import {S, KPOP, BAGPOPS, clamp, ease} from './timeline';
-import {drawText} from './font';
+import {drawText} from '../../_shared/font';
 
 export const RW = 270, RH = 480;
 THREE.ColorManagement.enabled = false;
