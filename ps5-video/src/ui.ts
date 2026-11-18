@@ -1,5 +1,5 @@
 import {drawText, textWidth, TextOpts} from './font';
-import {S, CLACK, clamp, easeOut} from './timeline';
+import {S, CLACK, SINK, clamp, easeOut, sixteenth} from './timeline';
 import type {PS5Scene} from './scene';
 
 export const UW = 360, UH = 640;
@@ -24,29 +24,37 @@ function line(x0: number, y0: number, x1: number, y1: number, c: string, w = 1) 
 
 type Sec = {f: number; n: number; t: string; s: string; facts: [number, string][]};
 const SECS: Sec[] = [
-  {f: S.disc, n: 1, t: 'O DISCO', s: 'LIDO POR LASER AZUL', facts: [[86, 'BLU-RAY DE ATÉ 100 GB'], [150, 'O LASER LÊ FURINHOS']]},
-  {f: S.install, n: 2, t: 'INSTALAÇÃO', s: 'COPIA TUDO PRO SSD', facts: [[236, 'SSD: 5,5 GB POR SEGUNDO']]},
-  {f: S.decomp, n: 3, t: 'DESCOMPRIME', s: 'CHIP SÓ PRA ISSO', facts: [[320, 'PEQUENO VIRA GRANDE'], [390, 'SEM GASTAR A CPU']]},
-  {f: S.ram, n: 4, t: 'MEMÓRIA RAM', s: '16 GB SUPER RÁPIDA', facts: [[478, 'MAPA, CARROS E PESSOAS']]},
-  {f: S.chip, n: 5, t: 'CPU + GPU', s: 'O CÉREBRO DO PS5', facts: [[552, 'CPU: 8 NÚCLEOS PENSAM'], [586, 'TRÂNSITO, FÍSICA, POLÍCIA'], [626, 'GPU: DESENHA A CIDADE'], [664, '60 QUADROS POR SEGUNDO']]},
-  {f: S.tv, n: 6, t: 'NA SUA TV', s: 'PELO CABO HDMI', facts: [[718, '1 QUADRO A CADA 16 MS']]},
-  {f: S.outro, n: 0, t: 'TUDO ISSO', s: 'EM POUCOS SEGUNDOS!', facts: [[798, 'QUAL MÁQUINA NO PRÓXIMO?']]},
+  {f: S.disc, n: 1, t: 'O DISCO', s: 'ENTRA E COMEÇA A GIRAR', facts: [[80, 'ROLETES PUXAM O DISCO'], [140, 'UM MOTOR FAZ ELE GIRAR'], [186, 'O RÓTULO FICA PRA BAIXO']]},
+  {f: S.laser, n: 2, t: 'O LASER', s: 'LÊ OS DADOS DO DISCO', facts: [[236, 'LASER AZUL DE 405 NM'], [282, 'FUROS MENORES QUE 1 MÍCRON'], [330, 'FURO = 1 / LISO = 0']]},
+  {f: S.install, n: 3, t: 'INSTALAÇÃO', s: 'COPIA TUDO PRO SSD', facts: [[396, '12 CHIPS: 825 GB'], [444, '5,5 GB POR SEGUNDO'], [492, '100X MAIS RÁPIDO QUE HD']]},
+  {f: S.decomp, n: 4, t: 'DESCOMPRIME', s: 'CHIP SÓ PRA ISSO', facts: [[556, 'O JOGO VEM ESPREMIDO'], [606, 'PEQUENO VIRA GRANDE'], [656, 'SEM GASTAR A CPU']]},
+  {f: S.ram, n: 5, t: 'MEMÓRIA RAM', s: '16 GB SUPER RÁPIDA', facts: [[716, '8 CHIPS DE 2 GB'], [766, '448 GB POR SEGUNDO'], [816, 'MAPA, CARROS E PESSOAS']]},
+  {f: S.cpu, n: 6, t: 'CPU', s: 'O CÉREBRO DO JOGO', facts: [[876, '8 NÚCLEOS TRABALHANDO'], [922, '3,5 BILHÕES DE CICLOS/S'], [972, 'TRÂNSITO, FÍSICA, POLÍCIA']]},
+  {f: S.gpu, n: 7, t: 'GPU', s: 'DESENHA A CIDADE', facts: [[1036, '36 UNIDADES DE CÁLCULO'], [1082, '10 TRILHÕES DE CONTAS/S'], [1130, '60 QUADROS POR SEGUNDO']]},
+  {f: S.cool, n: 8, t: 'REFRIGERAÇÃO', s: 'SEGURA O CALOR', facts: [[1196, 'O CHIP ESQUENTA MUITO!'], [1236, 'METAL LÍQUIDO NO CHIP'], [1300, 'DISSIPADOR + VENTOINHA']]},
+  {f: S.tv, n: 9, t: 'NA SUA TV', s: 'PELO CABO HDMI', facts: [[1356, 'ATÉ 4K NA SUA TV'], [1410, '1 QUADRO A CADA 16 MS'], [1460, 'E VOCÊ TÁ NA CIDADE!']]},
+  {f: S.outro, n: 0, t: 'TUDO ISSO', s: 'EM MILISSEGUNDOS!', facts: [[1516, 'DISCO > SSD > RAM'], [1556, 'CPU + GPU > TV'], [1596, 'QUAL MÁQUINA NO PRÓXIMO?']]},
 ];
 type Lab = [number, number, string, string, 'L' | 'R', number];
 const LABS: Lab[] = [
-  [100, S.install, 'DISCO', 'disc', 'R', 300], [128, S.install, 'LASER', 'laser', 'L', 430],
-  [228, S.decomp, 'SSD', 'ssd', 'R', 320],
-  [310, S.ram, 'DESCOMPRESSOR', 'decomp', 'L', 300], [400, S.ram, 'RAM', 'ram', 'R', 470],
-  [466, S.chip, 'CHIPS GDDR6', 'ram', 'L', 300], [482, S.chip, 'PROCESSADOR', 'apu', 'R', 440],
-  [556, S.tv, 'CPU', 'cpu', 'L', 300], [626, S.tv, 'GPU', 'gpu', 'R', 440],
-  [708, S.outro, 'HDMI', 'hdmi', 'R', 470],
+  [84, 140, 'ROLETES', 'rollers', 'R', 300], [144, S.laser, 'MOTOR DO DISCO', 'spindle', 'L', 470], [196, S.laser, 'DISCO', 'disc', 'R', 300],
+  [244, S.install, 'LENTE', 'laser', 'R', 300], [300, S.install, 'ROSCA DO TRILHO', 'worm', 'L', 470],
+  [400, S.decomp, 'CHIPS FLASH', 'ssd', 'L', 300], [470, S.decomp, 'CONTROLADOR', 'ctrl', 'R', 470],
+  [560, S.ram, 'DESCOMPRESSOR', 'decomp', 'L', 300],
+  [720, S.cpu, 'CHIPS GDDR6', 'ram', 'L', 300], [770, S.cpu, 'PROCESSADOR', 'apu', 'R', 440],
+  [880, S.gpu - 30, 'NÚCLEOS DA CPU', 'cpu', 'L', 300], [1040, S.cool, 'GPU', 'gpu', 'R', 440],
+  [1240, SINK - 10, 'METAL LÍQUIDO', 'liquid', 'L', 470], [SINK + 4, S.tv, 'DISSIPADOR', 'sink', 'R', 300], [1318, S.tv, 'VENTOINHA', 'fan', 'L', 470],
+  [1362, S.outro, 'HDMI', 'hdmi', 'R', 500],
 ];
 const METRIC = (f: number): [string, string, number, number] => { // badge, unit, value, gauge 0..1
   if (f < S.disc) return ['1000X LENTO', 'MB/S', 100, 0.1];
   if (f < S.install) return ['100X LENTO', 'MB/S', 100, 0.1];
   if (f < S.decomp) return ['10X LENTO', 'MB/S', 5500, 0.55];
   if (f < S.ram) return ['10X LENTO', 'MB/S', 9000, 0.7];
-  if (f < S.chip) return ['100X LENTO', 'GB/S', 448, 0.85];
+  if (f < S.cpu) return ['100X LENTO', 'GB/S', 448, 0.8];
+  if (f < S.gpu) return ['1000X LENTO', 'MHZ', 3500, 0.85];
+  if (f < S.cool) return ['1000X LENTO', 'MHZ', 2230, 0.9];
+  if (f < S.tv) return ['10X LENTO', 'WATTS', 200, 0.6];
   if (f < S.outro) return ['1000X LENTO', 'FPS', 60, 0.95];
   return ['VEL. REAL', 'FPS', 60, 0.95];
 };
@@ -134,7 +142,7 @@ export function drawUI(c: CanvasRenderingContext2D, f: number, sc: PS5Scene) {
   for (const l of LABS) label(f, l, sc);
   hud(f);
   if (f < S.disc) { // 2-second hook
-    const y1 = 100 + Math.round(-30 * (1 - easeOut(f / 6))), y2 = 142 + Math.round(-30 * (1 - easeOut((f - 10) / 6)));
+    const y1 = 100 + Math.round(-30 * (1 - easeOut(f / 6))), y2 = 142 + Math.round(30 * (1 - easeOut((f - 10) / 6)));
     T('O QUE O PS5 FAZ', 180, y1, 3, C.cream, {bold: true, outline: C.ink, shadow: C.red, align: 'center'});
     if (f >= 10) T('COM O GTA 6?', 180, y2, 4, C.gold, {bold: true, outline: C.ink, shadow: C.red, align: 'center'});
   } else {
@@ -144,7 +152,24 @@ export function drawUI(c: CanvasRenderingContext2D, f: number, sc: PS5Scene) {
     fact(f, sec);
   }
   pop(f, CLACK, 'CLACK!', 180, 420);
+  pop(f, SINK, 'CLUNK!', 180, 420);
   pop(f, S.tv, 'PLIM!', 180, 300);
+  // laser reading: 1s and 0s fly out of the lens
+  if (f >= S.laser + 40 && f < S.install) {
+    const [lx, ly, ok] = sc.project('laser');
+    const k = sixteenth(f, S.laser);
+    if (ok) for (let j = 0; j < 6; j++) {
+      const kk = k - j, age = f - (S.laser + kk * 5);
+      if (kk < 8 || age < 0) continue;
+      T((kk * 7 + (kk >> 1)) % 3 === 0 ? '0' : '1', lx + 10 + age * 2.2, ly - 18 - age * 1.4 + (kk % 3) * 8, 2, kk % 2 ? C.gold : C.cream, {bold: true, outline: C.ink});
+    }
+  }
+  // re-hook before the best part
+  if (f >= S.gpu - 26 && f < S.gpu + 4) {
+    const t = f - (S.gpu - 26), j = t < 6 ? Math.round(Math.sin(t * 2.5) * 2) : 0;
+    T('O MAIS INSANO', 180 + j, 380, 3, C.cream, {bold: true, outline: C.ink, shadow: C.red, align: 'center'});
+    T('VEM AGORA...', 180 - j, 420, 3, C.gold, {bold: true, outline: C.ink, shadow: C.red, align: 'center'});
+  }
   const fade = Math.max(0, (f - (S.end - 16)) / 16);
   if (fade > 0) { ctx.fillStyle = `rgba(0,0,0,${fade})`; ctx.fillRect(0, 0, UW, UH); }
 }

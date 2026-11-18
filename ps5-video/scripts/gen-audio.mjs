@@ -2,9 +2,9 @@
 // Same timing constants as src/timeline.ts (30 fps, 90 BPM => 20 frames per beat).
 import {writeFileSync, mkdirSync} from 'node:fs';
 
-const SR = 44100, FPS = 30, BEAT = 20, BAR = 80, TOTAL = 860, O = 60;
-const S = {hook: 0, disc: 60, install: 220, decomp: 300, ram: 460, chip: 540, gpu: 620, tv: 700, outro: 780, end: 860};
-const CLACK = 22;
+const SR = 44100, FPS = 30, BEAT = 20, BAR = 80, TOTAL = 1660, O = 60;
+const S = {hook: 0, disc: 60, laser: 220, install: 380, decomp: 540, ram: 700, cpu: 860, gpu: 1020, cool: 1180, tv: 1340, outro: 1500, end: 1660};
+const CLACK = 40, SINK = 1300, LIQUID = 1236;
 
 const N = Math.round((TOTAL / FPS) * SR);
 const music = new Float32Array(N), drums = new Float32Array(N), mach = new Float32Array(N), plinks = new Float32Array(N);
@@ -93,20 +93,23 @@ const CHORDS = [[53, 64, 67, 69, 72], [52, 62, 67, 71], [50, 60, 64, 65, 69], [4
 const ROOTS = [41, 40, 38, 33];
 for (let bar = -1; bar < (TOTAL - O) / BAR; bar++) {
   const f = O + bar * BAR, ch = CHORDS[(bar + 4) % 4], r = ROOTS[(bar + 4) % 4];
-  if (f === S.outro) { rhodes(f, ch, 0.05, 2.6); rhodes(f + BEAT * 2.5, ch.slice(1), 0.03, 1.4); bass(f, r, 2.5, 0.22); continue; }
+  if (f >= S.outro + BAR) { rhodes(f, ch, 0.05, 2.6); rhodes(f + BEAT * 2.5, ch.slice(1), 0.03, 1.4); bass(f, r, 2.5, 0.22); continue; }
   rhodes(f, ch, 0.055);
   rhodes(f + BEAT * 2.5, ch.slice(1), 0.032, 1.3);
   if (bar >= 0) { bass(f, r, 1.2); bass(f + BEAT * 2, r, 0.5, 0.2); bass(f + BEAT * 2.5, r + 12, 0.3, 0.14); bass(f + BEAT * 3.5, r + 7, 0.25, 0.14); }
 }
 // ---------- drums (the beat drops right after the hook) ----------
 const sixteenth = BEAT / 4, swing = 0.028;
-for (let bar = 0; bar < (S.outro - O) / BAR; bar++) {
+for (let bar = 0; bar < (S.outro + BAR - O) / BAR; bar++) {
   const f0 = O + bar * BAR;
-  for (let st = 0; st < 16; st++) hat(f0 + st * sixteenth, st % 4 === 2 ? 0.11 : 0.06, st % 2 ? swing : 0);
-  kick(drums, f0, 0.9); kick(drums, f0 + BEAT * 2, 0.8); kick(drums, f0 + BEAT * 2.5, 0.45);
-  snare(f0 + BEAT, 0.32); snare(f0 + BEAT * 3, 0.32);
+  const breakdown = f0 === S.gpu - BAR; // half-time bar before the re-hook
+  for (let st = 0; st < 16; st++) if (!breakdown || st % 4 === 0) hat(f0 + st * sixteenth, st % 4 === 2 ? 0.11 : 0.06, st % 2 ? swing : 0);
+  kick(drums, f0, 0.9);
+  if (!breakdown) { kick(drums, f0 + BEAT * 2, 0.8); kick(drums, f0 + BEAT * 2.5, 0.45); snare(f0 + BEAT, 0.32); }
+  snare(f0 + BEAT * 3, 0.32);
 }
-{ const s0 = fs(S.disc); let hp = 0, prev = 0; for (let i = 0; i < SR * 1.2; i++) { const n = noise(); hp = 0.7 * (hp + n - prev); prev = n; add(drums, s0 + i, hp * 0.3 * Math.exp(-i / (SR * 0.35))); } } // crash on the drop
+const crash = (f, a = 0.3) => { const s0 = fs(f); let hp = 0, prev = 0; for (let i = 0; i < SR * 1.2; i++) { const n = noise(); hp = 0.7 * (hp + n - prev); prev = n; add(drums, s0 + i, hp * a * Math.exp(-i / (SR * 0.35))); } };
+crash(S.disc); crash(S.gpu, 0.35); crash(S.tv, 0.25);
 // ---------- PS5 foley ----------
 function zap(f, m, amp) {
   const s0 = fs(f), fr = mtof(m);
@@ -116,33 +119,38 @@ function zap(f, m, amp) {
     add(mach, s0 + i, (v * 0.5 * Math.exp(-t / 0.07) + (i < 120 ? noise() * 0.4 * (1 - i / 120) : 0)) * amp);
   }
 }
-// disc slides in + CLACK
-{ const a = fs(0), b = fs(CLACK); let lp = 0; for (let i = a; i < b; i++) { lp += 0.05 * (noise() - lp); mach[i] += lp * 0.8 * Math.sin(Math.PI * (i - a) / (b - a)); } }
-{ const s0 = fs(CLACK); for (let i = 0; i < 4000; i++) add(mach, s0 + i, (noise() * 0.6 + Math.sin(2 * Math.PI * 140 * i / SR) * 0.8) * Math.exp(-i / 500)); }
-// disc motor spin-up whir
-{ const a = fs(CLACK), b = fs(S.install + 40); let ph = 0;
-  for (let i = a; i < b; i++) { const t = (i - a) / SR, fr = 120 + 900 * Math.min(1, t / 1.2); ph += 2 * Math.PI * fr / SR;
-    mach[i] += (Math.sin(ph) * 0.035 + Math.sin(ph * 2.01) * 0.015) * Math.min(1, t / 0.2, (b - i) / (SR * 0.3)); } }
-// laser reading bits: a blip on 16ths, pentatonic (the data becomes melody)
-{ const pent = [81, 84, 86, 88, 91, 93]; let k = 0;
-  for (let f = S.disc; f < S.install; f += 5, k++) zap(f, pent[(k * 7 + (k >> 2)) % 6], 0.03); }
-// install: data stream hiss + ticks on 8ths as blocks land in the SSD
-{ const a = fs(S.install), b = fs(S.decomp); let lp = 0; for (let i = a; i < b; i++) { lp += 0.3 * (noise() - lp); mach[i] += lp * 0.05 * Math.min(1, (i - a) / 3000, (b - i) / 3000); } }
-for (let f = S.install; f < S.decomp; f += 10) { const s0 = fs(f); for (let i = 0; i < 1500; i++) add(mach, s0 + i, Math.sin(2 * Math.PI * 1500 * i / SR) * 0.12 * Math.exp(-i / 200)); }
-// decompressor: each 16th "pops" a block bigger = arpeggio
-for (let f = S.decomp, k = 0; f < S.ram; f += 5, k++) {
-  const ch = CHORDS[(Math.floor((f - O) / BAR) + 4) % 4].slice(1);
-  plink(f, ch[k % ch.length] + 12 * (1 + (Math.floor(k / ch.length) % 2)), 0.07);
-}
-// RAM: shimmer on 8ths
-for (let f = S.ram, k = 0; f < S.chip; f += 10, k++) plink(f, [88, 91, 93, 96][k % 4], 0.05);
-// CPU cores firing on 16ths + GPU riser + cooling fan
-for (let f = S.chip, k = 0; f < S.gpu; f += 5, k++) zap(f, [69, 72, 76, 79, 81, 79, 76, 72][k % 8] + 12, 0.05);
-sweep(mach, S.gpu, S.tv, 200, 1600, 0.12, 0.6);
-{ const a = fs(S.chip), b = fs(S.tv + 30); let lp = 0; for (let i = a; i < b; i++) { lp += 0.06 * (noise() - lp); mach[i] += lp * 0.5 * Math.min(1, (i - a) / 8000, (b - i) / 8000); } }
-// TV on: "plim" chime + sub drop
-plink(S.tv, 84, 0.25); plink(S.tv + 3, 91, 0.18);
-kick(mach, S.tv, 0.9, 30, 90, 0.6);
+const clunk = (f, hz, a) => { const s0 = fs(f); for (let i = 0; i < 5000; i++) add(mach, s0 + i, (noise() * 0.5 + Math.sin(2 * Math.PI * hz * i / SR) * 0.9) * Math.exp(-i / 600) * a); };
+// rollers pull the disc in + CLACK
+{ const a = fs(14), b = fs(CLACK); let lp = 0, ph = 0; for (let i = a; i < b; i++) { lp += 0.05 * (noise() - lp); ph += 2 * Math.PI * 90 / SR; mach[i] += (lp * 0.7 + Math.sin(ph) * 0.05) * Math.sin(Math.PI * (i - a) / (b - a)); } }
+clunk(CLACK, 140, 1);
+// spindle motor spin-up whir (stays under the laser part)
+{ const a = fs(CLACK), b = fs(S.install + 80); let ph = 0;
+  for (let i = a; i < b; i++) { const t = (i - a) / SR, fr = 90 + 1000 * Math.min(1, (t / 1.6) ** 2); ph += 2 * Math.PI * fr / SR;
+    mach[i] += (Math.sin(ph) * 0.03 + Math.sin(ph * 2.01) * 0.012) * Math.min(1, t / 0.2, (b - i) / (SR * 0.4)); } }
+// laser bits on 16ths (pentatonic: the data becomes melody)
+{ const pent = [81, 84, 86, 88, 91, 93]; let k = 0; for (let f = S.laser; f < S.install; f += 5, k++) zap(f, pent[(k * 7 + (k >> 2)) % 6], k % 4 === 0 ? 0.04 : 0.026); }
+// SSD: data hiss + ticks on 8ths
+{ const a = fs(S.install), b = fs(S.decomp); let lp = 0; for (let i = a; i < b; i++) { lp += 0.3 * (noise() - lp); mach[i] += lp * 0.045 * Math.min(1, (i - a) / 3000, (b - i) / 3000); } }
+for (let f = S.install, k = 0; f < S.decomp; f += 10, k++) { const s0 = fs(f), hz = k % 2 ? 1500 : 1800; for (let i = 0; i < 1500; i++) add(mach, s0 + i, Math.sin(2 * Math.PI * hz * i / SR) * 0.1 * Math.exp(-i / 200)); }
+// decompressor pops on 16ths (arpeggio)
+for (let f = S.decomp, k = 0; f < S.ram; f += 5, k++) { const ch = CHORDS[(Math.floor((f - O) / BAR) + 4) % 4].slice(1); plink(f, ch[k % ch.length] + 12 * (1 + (Math.floor(k / ch.length) % 2)), 0.065); }
+// RAM shimmer on 8ths
+for (let f = S.ram + 20, k = 0; f < S.cpu; f += 10, k++) plink(f, [88, 91, 93, 96, 93, 91][k % 6], 0.045);
+// CPU cores on 16ths
+for (let f = S.cpu, k = 0; f < S.gpu - BAR; f += 5, k++) zap(f, [69, 72, 76, 79, 81, 79, 76, 72][k % 8] + 12, 0.045);
+// re-hook: riser into the GPU drop
+sweep(mach, S.gpu - 26, S.gpu, 120, 1400, 0.22, 0.6);
+// GPU: shimmering wave + coil whine
+for (let f = S.gpu, k = 0; f < S.cool; f += 5, k++) if (k % 2 === 0) zap(f, [76, 79, 83, 86][(k >> 1) % 4] + 12, 0.03);
+// cooling: heat sizzle, liquid metal "shloop", heatsink CLUNK, fan whoosh
+{ const a = fs(S.cool), b = fs(SINK); let hp = 0, prev = 0; for (let i = a; i < b; i++) { const n = noise(); hp = 0.9 * (hp + n - prev); prev = n; mach[i] += hp * 0.025 * (0.6 + 0.4 * Math.sin(i / SR * 9)) * Math.min(1, (i - a) / 6000, (b - i) / 3000); } }
+sweep(mach, LIQUID, LIQUID + 12, 900, 200, 0.18, 0.1);
+clunk(SINK, 95, 1.1);
+{ const a = fs(SINK - 60), b = fs(S.tv + 20); let lp = 0; for (let i = a; i < b; i++) { lp += 0.06 * (noise() - lp); mach[i] += lp * 0.6 * Math.min(1, (i - a) / 20000, (b - i) / 8000); } }
+// TV on
+plink(S.tv, 84, 0.25); plink(S.tv + 3, 91, 0.18); kick(mach, S.tv, 0.9, 30, 90, 0.6);
+// outro: recap blips on beats
+for (let f = S.outro + 16, k = 0; k < 3; f += 40, k++) plink(f, [84, 88, 91][k], 0.15);
 
 // ---------- vinyl crackle ----------
 const crackle = new Float32Array(N);
