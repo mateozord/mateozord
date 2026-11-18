@@ -1,0 +1,180 @@
+// Procedural lo-fi soundtrack + machine foley, frame-locked to the animation.
+// Same timing constants as src/timeline.ts (30 fps, 90 BPM => 20 frames per beat).
+import {writeFileSync, mkdirSync} from 'node:fs';
+
+const SR = 44100, FPS = 30, BEAT = 20, BAR = 80, TOTAL = 860, O = 60;
+const S = {hook: 0, disc: 60, install: 220, decomp: 300, ram: 460, chip: 540, gpu: 620, tv: 700, outro: 780, end: 860};
+const CLACK = 22;
+
+const N = Math.round((TOTAL / FPS) * SR);
+const music = new Float32Array(N), drums = new Float32Array(N), mach = new Float32Array(N), plinks = new Float32Array(N);
+const fs = (f) => Math.round((f / FPS) * SR); // frame -> sample
+const mtof = (m) => 440 * Math.pow(2, (m - 69) / 12);
+let seed = 12345;
+const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
+const noise = () => rnd() * 2 - 1;
+const clamp = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
+const add = (buf, i, v) => { if (i >= 0 && i < N) buf[i] += v; };
+
+// ---------- instruments ----------
+function kick(buf, f, amp = 0.9, lo = 45, hi = 130, dec = 0.22) {
+  const s0 = fs(f); let ph = 0;
+  for (let i = 0; i < SR * 0.45; i++) {
+    const t = i / SR, fr = lo + (hi - lo) * Math.exp(-t * 28);
+    ph += (2 * Math.PI * fr) / SR;
+    add(buf, s0 + i, Math.sin(ph) * Math.exp(-t / dec) * amp + (i < 60 ? noise() * 0.3 * amp * (1 - i / 60) : 0));
+  }
+}
+function thud(f, amp = 1) { // clothes hitting water: low thump + splash
+  kick(drums, f, amp * 0.95, 42, 110, 0.26);
+  const s0 = fs(f); let lp = 0, lp2 = 0;
+  for (let i = 0; i < SR * 0.35; i++) {
+    const t = i / SR; lp += 0.25 * (noise() - lp); lp2 += 0.5 * (lp - lp2);
+    add(mach, s0 + i, (lp - lp2 * 0.6) * Math.exp(-t / 0.09) * amp * 0.9);
+  }
+}
+function snare(f, amp = 0.35) {
+  const s0 = fs(f); let lp = 0, hp = 0, prev = 0;
+  for (let i = 0; i < SR * 0.25; i++) {
+    const t = i / SR, n = noise(); hp = 0.85 * (hp + n - prev); prev = n; lp += 0.35 * (hp - lp);
+    add(drums, s0 + i, (lp * Math.exp(-t / 0.07) + Math.sin(2 * Math.PI * 185 * t) * Math.exp(-t / 0.04) * 0.5) * amp);
+  }
+}
+function hat(f, amp = 0.09, swing = 0) {
+  const s0 = fs(f) + Math.round(swing * SR); let hp = 0, prev = 0;
+  for (let i = 0; i < SR * 0.06; i++) {
+    const t = i / SR, n = noise(); hp = 0.6 * (hp + n - prev); prev = n;
+    add(drums, s0 + i, hp * Math.exp(-t / 0.018) * amp);
+  }
+}
+function rhodes(f, notes, amp = 0.055, len = 2.6) {
+  const s0 = fs(f);
+  for (const m of notes) {
+    const fr = mtof(m) * (1 + (rnd() - 0.5) * 0.002);
+    for (let i = 0; i < SR * len; i++) {
+      const t = i / SR, env = Math.min(1, t / 0.006) * Math.exp(-t / 1.1) * (t > len - 0.2 ? (len - t) / 0.2 : 1);
+      const mod = Math.sin(2 * Math.PI * fr * 2 * t) * 0.9 * Math.exp(-t / 0.25);
+      const trem = 1 + 0.18 * Math.sin(2 * Math.PI * 4.2 * t);
+      add(music, s0 + i, Math.sin(2 * Math.PI * fr * t + mod) * env * trem * amp);
+    }
+  }
+}
+function bass(f, m, dur, amp = 0.28) {
+  const s0 = fs(f), fr = mtof(m);
+  for (let i = 0; i < SR * dur; i++) {
+    const t = i / SR, env = Math.min(1, t / 0.01) * Math.exp(-t / 0.5) * Math.min(1, (dur - t) / 0.05);
+    add(music, s0 + i, Math.tanh(Math.sin(2 * Math.PI * fr * t) * 1.6) * env * amp);
+  }
+}
+function plink(f, m, amp = 0.22) { // water-drop marimba note
+  const s0 = fs(f), fr = mtof(m);
+  for (let i = 0; i < SR * 0.9; i++) {
+    const t = i / SR, gl = fr * (1 + 0.06 * Math.exp(-t * 60));
+    const v = Math.sin(2 * Math.PI * gl * t) * Math.exp(-t / 0.28) + 0.35 * Math.sin(2 * Math.PI * gl * 2.76 * t) * Math.exp(-t / 0.06);
+    add(plinks, s0 + i, v * amp * Math.min(1, t / 0.002));
+  }
+}
+function sweep(buf, f0, f1, hz0, hz1, amp, noiseAmt = 0.3) {
+  const a = fs(f0), b = fs(f1); let ph = 0, lp = 0;
+  for (let i = a; i < b; i++) {
+    const t = (i - a) / (b - a), fr = hz0 * Math.pow(hz1 / hz0, t);
+    ph += (2 * Math.PI * fr) / SR; lp += 0.1 * (noise() - lp);
+    const env = Math.sin(Math.PI * t);
+    add(buf, i, (Math.sin(ph) * 0.6 + lp * noiseAmt * 3) * env * amp);
+  }
+}
+function beep(f, m, dur = 0.22, amp = 0.12) {
+  const s0 = fs(f), fr = mtof(m);
+  for (let i = 0; i < SR * dur; i++) { const t = i / SR; add(mach, s0 + i, (Math.sin(2 * Math.PI * fr * t) > 0 ? 1 : -1) * amp * Math.min(1, t / 0.005, (dur - t) / 0.02)); }
+}
+
+// ---------- music: Fmaj9 - Em7 - Dm9 - Am9 (lo-fi ii-V-ish loop in A minor) ----------
+const CHORDS = [[53, 64, 67, 69, 72], [52, 62, 67, 71], [50, 60, 64, 65, 69], [45, 55, 59, 60, 64]];
+const ROOTS = [41, 40, 38, 33];
+for (let bar = -1; bar < (TOTAL - O) / BAR; bar++) {
+  const f = O + bar * BAR, ch = CHORDS[(bar + 4) % 4], r = ROOTS[(bar + 4) % 4];
+  if (f === S.outro) { rhodes(f, ch, 0.05, 2.6); rhodes(f + BEAT * 2.5, ch.slice(1), 0.03, 1.4); bass(f, r, 2.5, 0.22); continue; }
+  rhodes(f, ch, 0.055);
+  rhodes(f + BEAT * 2.5, ch.slice(1), 0.032, 1.3);
+  if (bar >= 0) { bass(f, r, 1.2); bass(f + BEAT * 2, r, 0.5, 0.2); bass(f + BEAT * 2.5, r + 12, 0.3, 0.14); bass(f + BEAT * 3.5, r + 7, 0.25, 0.14); }
+}
+// ---------- drums (the beat drops right after the hook) ----------
+const sixteenth = BEAT / 4, swing = 0.028;
+for (let bar = 0; bar < (S.outro - O) / BAR; bar++) {
+  const f0 = O + bar * BAR;
+  for (let st = 0; st < 16; st++) hat(f0 + st * sixteenth, st % 4 === 2 ? 0.11 : 0.06, st % 2 ? swing : 0);
+  kick(drums, f0, 0.9); kick(drums, f0 + BEAT * 2, 0.8); kick(drums, f0 + BEAT * 2.5, 0.45);
+  snare(f0 + BEAT, 0.32); snare(f0 + BEAT * 3, 0.32);
+}
+{ const s0 = fs(S.disc); let hp = 0, prev = 0; for (let i = 0; i < SR * 1.2; i++) { const n = noise(); hp = 0.7 * (hp + n - prev); prev = n; add(drums, s0 + i, hp * 0.3 * Math.exp(-i / (SR * 0.35))); } } // crash on the drop
+// ---------- PS5 foley ----------
+function zap(f, m, amp) {
+  const s0 = fs(f), fr = mtof(m);
+  for (let i = 0; i < SR * 0.25; i++) {
+    const t = i / SR; let v = 0;
+    for (let k = 1; k <= 5; k++) v += Math.sin(2 * Math.PI * fr * k * t) / k;
+    add(mach, s0 + i, (v * 0.5 * Math.exp(-t / 0.07) + (i < 120 ? noise() * 0.4 * (1 - i / 120) : 0)) * amp);
+  }
+}
+// disc slides in + CLACK
+{ const a = fs(0), b = fs(CLACK); let lp = 0; for (let i = a; i < b; i++) { lp += 0.05 * (noise() - lp); mach[i] += lp * 0.8 * Math.sin(Math.PI * (i - a) / (b - a)); } }
+{ const s0 = fs(CLACK); for (let i = 0; i < 4000; i++) add(mach, s0 + i, (noise() * 0.6 + Math.sin(2 * Math.PI * 140 * i / SR) * 0.8) * Math.exp(-i / 500)); }
+// disc motor spin-up whir
+{ const a = fs(CLACK), b = fs(S.install + 40); let ph = 0;
+  for (let i = a; i < b; i++) { const t = (i - a) / SR, fr = 120 + 900 * Math.min(1, t / 1.2); ph += 2 * Math.PI * fr / SR;
+    mach[i] += (Math.sin(ph) * 0.035 + Math.sin(ph * 2.01) * 0.015) * Math.min(1, t / 0.2, (b - i) / (SR * 0.3)); } }
+// laser reading bits: a blip on 16ths, pentatonic (the data becomes melody)
+{ const pent = [81, 84, 86, 88, 91, 93]; let k = 0;
+  for (let f = S.disc; f < S.install; f += 5, k++) zap(f, pent[(k * 7 + (k >> 2)) % 6], 0.03); }
+// install: data stream hiss + ticks on 8ths as blocks land in the SSD
+{ const a = fs(S.install), b = fs(S.decomp); let lp = 0; for (let i = a; i < b; i++) { lp += 0.3 * (noise() - lp); mach[i] += lp * 0.05 * Math.min(1, (i - a) / 3000, (b - i) / 3000); } }
+for (let f = S.install; f < S.decomp; f += 10) { const s0 = fs(f); for (let i = 0; i < 1500; i++) add(mach, s0 + i, Math.sin(2 * Math.PI * 1500 * i / SR) * 0.12 * Math.exp(-i / 200)); }
+// decompressor: each 16th "pops" a block bigger = arpeggio
+for (let f = S.decomp, k = 0; f < S.ram; f += 5, k++) {
+  const ch = CHORDS[(Math.floor((f - O) / BAR) + 4) % 4].slice(1);
+  plink(f, ch[k % ch.length] + 12 * (1 + (Math.floor(k / ch.length) % 2)), 0.07);
+}
+// RAM: shimmer on 8ths
+for (let f = S.ram, k = 0; f < S.chip; f += 10, k++) plink(f, [88, 91, 93, 96][k % 4], 0.05);
+// CPU cores firing on 16ths + GPU riser + cooling fan
+for (let f = S.chip, k = 0; f < S.gpu; f += 5, k++) zap(f, [69, 72, 76, 79, 81, 79, 76, 72][k % 8] + 12, 0.05);
+sweep(mach, S.gpu, S.tv, 200, 1600, 0.12, 0.6);
+{ const a = fs(S.chip), b = fs(S.tv + 30); let lp = 0; for (let i = a; i < b; i++) { lp += 0.06 * (noise() - lp); mach[i] += lp * 0.5 * Math.min(1, (i - a) / 8000, (b - i) / 8000); } }
+// TV on: "plim" chime + sub drop
+plink(S.tv, 84, 0.25); plink(S.tv + 3, 91, 0.18);
+kick(mach, S.tv, 0.9, 30, 90, 0.6);
+
+// ---------- vinyl crackle ----------
+const crackle = new Float32Array(N);
+{ let lp = 0; for (let i = 0; i < N; i++) { lp += 0.02 * (noise() - lp); crackle[i] = lp * 0.05 + (rnd() < 0.0006 ? noise() * 0.25 : 0); } }
+
+// ---------- mix ----------
+// music bus: lo-fi lowpass (dark), heavy filter + duck in slow motion
+const musicBus = new Float32Array(N);
+for (let i = 0; i < N; i++) musicBus[i] = music[i] + drums[i];
+const slowAmt = (i) => { const f = (i / SR) * FPS; return clamp((S.disc - f) / 4); }; // hook: muffled music, beat drops at the reveal
+{ let y = 0; for (let i = 0; i < N; i++) { const s = slowAmt(i), fc = 5200 * (1 - s) + 320 * s, a = 1 - Math.exp(-2 * Math.PI * fc / SR); y += a * (musicBus[i] - y); musicBus[i] = y * (1 - 0.72 * s); } }
+// simple echo on plinks
+{ const d = Math.round(SR * (BEAT / FPS) * 0.75); for (let i = d; i < N; i++) plinks[i] += plinks[i - d] * 0.38; }
+const out = new Float32Array(N);
+let peak = 0;
+for (let i = 0; i < N; i++) {
+  const f = (i / SR) * FPS;
+  const master = Math.min(1, f / 1) * Math.min(1, (TOTAL - f) / 24);
+  const v = (musicBus[i] * 0.95 + mach[i] * 1.0 + plinks[i] + crackle[i]) * master;
+  out[i] = Math.tanh(v * 1.1) * 0.9;
+  peak = Math.max(peak, Math.abs(out[i]));
+}
+const buf = Buffer.alloc(44 + N * 4);
+buf.write('RIFF', 0); buf.writeUInt32LE(36 + N * 4, 4); buf.write('WAVE', 8); buf.write('fmt ', 12);
+buf.writeUInt32LE(16, 16); buf.writeUInt16LE(1, 20); buf.writeUInt16LE(2, 22); buf.writeUInt32LE(SR, 24);
+buf.writeUInt32LE(SR * 4, 28); buf.writeUInt16LE(4, 32); buf.writeUInt16LE(16, 34); buf.write('data', 36); buf.writeUInt32LE(N * 4, 40);
+// light stereo width: plinks/crackle slightly offset
+for (let i = 0; i < N; i++) {
+  const w = (plinks[i] * 0.15 + crackle[i] * 0.3);
+  const l = Math.max(-1, Math.min(1, out[i] + w * 0.3)), r = Math.max(-1, Math.min(1, out[i] - w * 0.3));
+  buf.writeInt16LE(Math.round(l * 32767), 44 + i * 4); buf.writeInt16LE(Math.round(r * 32767), 46 + i * 4);
+}
+mkdirSync(new URL('../public/', import.meta.url), {recursive: true});
+writeFileSync(new URL('../public/soundtrack.wav', import.meta.url), buf);
+console.log('soundtrack.wav', (N / SR).toFixed(2) + 's', 'peak', peak.toFixed(3));
