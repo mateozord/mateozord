@@ -1,5 +1,5 @@
 import {drawText, textWidth, TextOpts} from './font';
-import {S, POPS, FORK, DING, cutsAt, clamp, easeOut} from './timeline';
+import {S, KPOP, BAGPOPS, DING, cutsAt, clamp, easeOut} from './timeline';
 import type {MicroScene} from './scene';
 
 export const UW = 360, UH = 640;
@@ -24,37 +24,40 @@ function line(x0: number, y0: number, x1: number, y1: number, c: string, w = 1) 
 
 type Sec = {f: number; n: number; t: string; s: string; facts: [number, string][]};
 const SECS: Sec[] = [
-  {f: S.door, n: 1, t: 'A PORTA', s: 'TEM UMA TELA DE METAL', facts: [[80, 'FURINHOS NA JANELA'], [124, 'SEGURAM AS MICRO-ONDAS'], [168, 'MAS DEIXAM A LUZ PASSAR']]},
-  {f: S.transf, n: 2, t: 'TRANSFORMADOR', s: 'MUITA TENSÃO!', facts: [[236, '220 V VIRAM 4.000 V'], [286, 'CAPACITOR + DIODO AJUDAM'], [336, 'NUNCA ABRA UM MICRO-ONDAS!']]},
-  {f: S.mag, n: 3, t: 'MAGNETRON', s: 'O CORAÇÃO DO APARELHO', facts: [[396, 'ÍMÃS FAZEM ELÉTRONS GIRAR'], [446, 'O GIRO CRIA AS ONDAS'], [496, '2,45 BILHÕES DE VEZES/S']]},
-  {f: S.wave, n: 4, t: 'GUIA DE ONDA', s: 'UM TUBO DE METAL', facts: [[556, 'LEVA AS ONDAS PRA CAIXA'], [606, 'ELAS BATEM NAS PAREDES'], [656, 'E VOLTAM, SEM PARAR']]},
-  {f: S.plate, n: 5, t: 'O PRATO GIRA', s: 'POR UM MOTIVO...', facts: [[716, 'ONDAS FAZEM PONTOS QUENTES'], [766, 'GIRANDO, A COMIDA PASSA'], [806, 'POR TODOS ELES!']]},
-  {f: S.mol, n: 6, t: 'O SEGREDO', s: 'MOLÉCULAS DE ÁGUA', facts: [[876, 'A ÁGUA É UM ÍMÃZINHO'], [920, 'VIRA PRA LÁ E PRA CÁ'], [968, '2,45 BILHÕES DE VEZES/S'], [1012, 'ESSE ATRITO VIRA CALOR'], [1050, 'O VAPOR ESTOURA A PIPOCA!']]},
-  {f: S.metal, n: 7, t: 'E O GARFO?', s: 'METAL NO MICRO-ONDAS', facts: [[1144, 'METAL REFLETE AS ONDAS'], [1190, 'AS PONTAS SOLTAM FAÍSCAS!'], [1230, 'NÃO FAÇA ISSO EM CASA']]},
-  {f: S.pop, n: 8, t: 'PRONTO!', s: 'PIM PIM PIM', facts: [[1276, 'CADA ESTALO = 1 PIPOCA'], [1330, 'O PRATO NÃO ESQUENTA:'], [1366, 'ELE NÃO TEM ÁGUA!']]},
-  {f: S.outro, n: 0, t: 'MITO?', s: 'DE DENTRO PRA FORA', facts: [[1440, 'AS ONDAS ENTRAM SÓ 1-2 CM'], [1490, 'O MEIO ESQUENTA DEPOIS'], [1536, 'QUAL MÁQUINA NO PRÓXIMO?']]},
+  {f: S.door, n: 1, t: 'A PORTA', s: 'TELA QUE SEGURA ONDAS', facts: [[76, 'A JANELA TEM TELA DE METAL'], [156, 'FUROS SEGURAM AS ONDAS'], [236, 'MAS A LUZ PASSA POR ELES']]},
+  {f: S.transf, n: 2, t: 'TRANSFORMADOR', s: 'MUITA TENSÃO!', facts: [[316, '220 V VIRAM 4.000 V'], [396, 'CAPACITOR GUARDA ENERGIA'], [476, 'NUNCA ABRA UM MICRO-ONDAS!']]},
+  {f: S.mag, n: 3, t: 'MAGNETRON', s: 'O CORAÇÃO DO APARELHO', facts: [[556, 'ÍMÃS FAZEM ELÉTRONS GIRAR'], [636, 'O GIRO CRIA AS ONDAS'], [716, '2,45 BILHÕES DE VEZES/S']]},
+  {f: S.wave, n: 4, t: 'AS ONDAS', s: 'BATENDO NA CAIXA', facts: [[796, 'UM TUBO LEVA AS ONDAS'], [876, 'ELAS BATEM NAS PAREDES'], [956, 'E FORMAM ONDAS PARADAS']]},
+  {f: S.plate, n: 5, t: 'O PRATO GIRA', s: 'POR UM MOTIVO...', facts: [[1036, 'ISSO CRIA PONTOS QUENTES'], [1116, 'E PONTOS FRIOS!'], [1196, 'GIRANDO, TUDO ESQUENTA']]},
+  {f: S.bag, n: 6, t: 'O SACO', s: 'NÃO É SÓ PAPEL', facts: [[1276, 'TEM UM SUSCEPTOR'], [1356, 'METAL FININHO QUE ESQUENTA'], [1436, 'E FRITA O MILHO NO ÓLEO']]},
+  {f: S.kernel, n: 7, t: 'O MILHO', s: 'UMA PANELA DE PRESSÃO', facts: [[1516, 'O MILHO TEM 14% DE ÁGUA'], [1596, 'A ONDA SACODE A ÁGUA'], [1676, 'A ÁGUA VIRA VAPOR'], [1756, 'PRESSÃO: 9X A DO AR!']]},
+  {f: S.popping, n: 8, t: 'POC POC POC', s: 'DENTRO DO SACO', facts: [[1836, 'O AMIDO VIRA ESPUMA'], [1916, 'E A PIPOCA VIRA DO AVESSO']]},
+  {f: S.ding, n: 0, t: 'PRONTO!', s: 'PIM PIM PIM', facts: [[2006, 'POUCOS ESTALOS? PODE TIRAR!']]},
+  {f: S.outro, n: 0, t: 'MITO?', s: 'DE DENTRO PRA FORA', facts: [[2076, 'AS ONDAS SÓ ENTRAM 1-2 CM'], [2156, 'O MEIO ESQUENTA DEPOIS'], [2236, 'QUAL MÁQUINA NO PRÓXIMO?']]},
 ];
 type Lab = [number, number, string, string, 'L' | 'R', number];
+// max 2 at a time, fixed slots: L/R at y 330 or 470 (never under the banner)
 const LABS: Lab[] = [
-  [100, 190, 'TELA DE METAL', 'door', 'L', 300], [150, 200, 'PAINEL', 'keypad', 'R', 470],
-  [240, S.mag, 'TRANSFORMADOR', 'transf', 'L', 300], [290, S.mag, 'CAPACITOR', 'cap', 'R', 470], [320, S.mag, 'DIODO', 'diode', 'L', 470],
-  [400, S.wave, 'ÍMÃS', 'magnets', 'R', 300], [430, S.wave, 'CÁTODO', 'cathode', 'L', 430], [470, S.wave, 'ANTENA', 'antenna', 'R', 520],
-  [560, S.plate, 'GUIA DE ONDA', 'guide', 'L', 300], [600, S.plate, 'MICA', 'mica', 'R', 470],
-  [720, S.mol, 'PIPOCA', 'bag', 'R', 470],
-  [880, S.metal, 'MOLÉCULAS', 'water', 'L', 300], [1044, S.metal, 'CASCA', 'shell', 'R', 470],
-  [FORK + 6, S.pop, 'GARFO', 'fork', 'L', 300],
-  [1340, S.outro, 'TIMER', 'display', 'L', 300],
-  [1450, S.end, '1-2 CM', 'edge', 'L', 300], [1494, S.end, 'MEIO FRIO', 'center', 'R', 470],
+  [110, 280, 'TELA DE METAL', 'door', 'L', 470], [190, 280, 'DISPLAY', 'display', 'R', 330],
+  [330, 440, 'TRANSFORMADOR', 'transf', 'L', 330], [400, 530, 'CAPACITOR', 'cap', 'R', 470], [450, 530, 'DIODO', 'diode', 'L', 330],
+  [580, 700, 'ÍMÃS', 'magnets', 'R', 330], [620, 770, 'CÁTODO', 'cathode', 'L', 470], [710, 770, 'ANTENA', 'antenna', 'R', 330],
+  [810, 930, 'GUIA DE ONDA', 'guide', 'L', 330], [880, 1010, 'MICA', 'mica', 'R', 470], [940, 1010, 'ONDA PARADA', 'ribbon', 'L', 330],
+  [1060, 1250, 'PONTO QUENTE', 'hotspot', 'L', 470], [1130, 1250, 'PRATO', 'plate', 'R', 330],
+  [1290, 1420, 'SUSCEPTOR', 'susceptor', 'R', 470], [1350, 1490, 'ÓLEO + SAL', 'oil', 'L', 330], [1430, 1490, 'MILHO', 'kern', 'R', 470],
+  [1530, 1670, 'CASCA', 'shell', 'R', 330], [1600, 1790, 'ÁGUA', 'water', 'L', 470], [1690, 1790, 'VAPOR', 'steam', 'R', 330],
+  [1880, 1990, 'PIPOCA', 'popped', 'R', 330],
+  [2090, 2290, '1-2 CM', 'edge', 'L', 470], [2170, 2290, 'MEIO FRIO', 'center', 'R', 330],
 ];
 const METRIC = (f: number): [string, string, number, number] => {
   if (f < S.door) return ['SUPER LENTO', 'GRAUS', Math.round(25 + f * 4), 0.9];
   if (f < S.transf) return ['VEL. REAL', 'WATTS', 1000, 0.5];
   if (f < S.mag) return ['VEL. REAL', 'VOLTS', 4000, 0.9];
   if (f < S.plate) return ['SUPER LENTO', 'MHZ', 2450, 0.8];
-  if (f < S.mol) return ['VEL. REAL', 'RPM', 6, 0.2];
-  if (f < S.metal) return ['SUPER LENTO', 'GRAUS', Math.round(25 + 155 * clamp((f - S.mol) / 220)), 0.2 + 0.7 * clamp((f - S.mol) / 220)];
-  if (f < S.pop) return ['VEL. REAL', 'WATTS', 1000, 0.5];
-  if (f < S.outro) return ['VEL. REAL', 'SEG', Math.max(0, 90 - Math.floor((f - 180) / 13)), 0.3];
+  if (f < S.bag) return ['VEL. REAL', 'RPM', 6, 0.2];
+  if (f < S.kernel) return ['VEL. REAL', 'GRAUS', Math.round(25 + 175 * clamp((f - S.bag - 100) / 140)), 0.3 + 0.5 * clamp((f - S.bag - 100) / 140)];
+  if (f < S.popping) { const p = clamp((f - S.kernel) / 300); return ['SUPER LENTO', 'ATM', Math.max(1, Math.round(1 + 8 * p * p)), 0.1 + 0.85 * p]; }
+  if (f < S.ding + 26) return ['10X LENTO', 'SEG', Math.max(0, 180 - Math.floor((f - 180) / 10)), 0.3];
+  if (f < S.outro) return ['VEL. REAL', 'SEG', 0, 0.05];
   return ['SUPER LENTO', 'CM', 2, 0.15];
 };
 
@@ -92,7 +95,7 @@ function banner(f: number, sec: Sec) {
     }
   }
   T(sec.t, x0 + w / 2, y0 + 12, 3, C.ink, {bold: true, align: 'center'});
-  const n = clamp(Math.floor((t - 6) * 1.6), 0, sec.s.length);
+  const n = clamp(Math.floor((t - 6) * 1.1), 0, sec.s.length);
   T(sec.s.slice(0, n), x0 + w / 2 - tw(sec.s, 2) / 2, y0 + 38, 2, C.red, {bold: true});
   if (sec.n > 0) {
     const cx = x0 + 2, cy = y0 + 4;
@@ -105,7 +108,7 @@ function fact(f: number, sec: Sec) {
   let cur: [number, string] | null = null;
   for (const q of sec.facts) if (f >= q[0]) cur = q;
   if (!cur) return;
-  const t = f - cur[0], txt = cur[1], n = clamp(Math.floor(t * 1.5), 0, txt.length);
+  const t = f - cur[0], txt = cur[1], n = clamp(Math.floor(t * 0.9), 0, txt.length);
   const w = tw(txt, 2) + 16, x = Math.round(190 - w / 2), y = 152 + Math.round(-10 * (1 - easeOut(t / 6)));
   R(x + 14, 144, 2, y - 144, C.ink); R(x + w - 16, 144, 2, y - 144, C.ink);
   R(x - 2, y - 2, w + 4, 26, C.ink); R(x, y, w, 22, C.cream);
@@ -116,7 +119,7 @@ function label(f: number, l: Lab, sc: MicroScene) {
   if (f < a || f >= b) return;
   const [px, py, ok] = sc.project(name);
   if (!ok) return;
-  const n = clamp(Math.floor((f - a) * 1.5), 0, txt.length);
+  const n = clamp(Math.floor((f - a) * 1.0), 0, txt.length);
   if (n < 1) return;
   const w = tw(txt.slice(0, n), 2) + 14;
   const x = side === 'L' ? 8 : 352 - w, ax = side === 'L' ? x + w : x, ay = y + 11;
@@ -142,6 +145,7 @@ export function drawUI(c: CanvasRenderingContext2D, f: number, sc: MicroScene) {
   hud(f);
   if (f < S.door) { // 2-second hook
     const y1 = 100 + Math.round(-30 * (1 - easeOut(f / 6))), y2 = 142 + Math.round(30 * (1 - easeOut((f - 10) / 6)));
+    R(0, 88, UW, 86, 'rgba(8,10,28,0.55)');
     T('COMO ELE ESQUENTA', 180, y1, 3, C.cream, {bold: true, outline: C.ink, shadow: C.red, align: 'center'});
     if (f >= 10) T('SEM FOGO?', 180, y2, 4, C.gold, {bold: true, outline: C.ink, shadow: C.red, align: 'center'});
   } else {
@@ -150,14 +154,15 @@ export function drawUI(c: CanvasRenderingContext2D, f: number, sc: MicroScene) {
     banner(f, sec);
     fact(f, sec);
   }
-  POPS.forEach((p) => pop(f, p, 'POC!', 180, 470));
-  pop(f, 170, 'BIP!', 260, 380);
-  for (let b = FORK + 20; b < S.pop - 10; b += 20) pop(f, b, 'ZZT!', 120 + ((b / 20) % 3) * 60, 230);
-  DING.forEach((d) => pop(f, d, 'PIM!', 180, 260 + (d - DING[0]) * 2));
-  if (f >= S.mol - 28 && f < S.mol + 2) {
-    const t = f - (S.mol - 28), j = t < 6 ? Math.round(Math.sin(t * 2.5) * 2) : 0;
-    T('AGORA O', 180 + j, 360, 3, C.cream, {bold: true, outline: C.ink, shadow: C.red, align: 'center'});
-    T('SEGREDO...', 180 - j, 400, 4, C.gold, {bold: true, outline: C.ink, shadow: C.red, align: 'center'});
+  KPOP.forEach((p) => pop(f, p, 'POC!', 180, 575));
+  pop(f, 170, 'BIP!', 180, 575);
+  BAGPOPS.forEach((p, i) => { if (i % 2 === 0) pop(f, p, 'POC!', 110 + ((i * 37) % 140), 575); });
+  DING.forEach((d) => pop(f, d, 'PIM!', 180, 575));
+  if (f >= S.kernel - 28 && f < S.kernel + 2) {
+    const t = f - (S.kernel - 28), j = t < 6 ? Math.round(Math.sin(t * 2.5) * 2) : 0;
+    R(0, 505, UW, 80, 'rgba(8,10,28,0.55)');
+    T('AGORA O MAIS', 180 + j, 515, 3, C.cream, {bold: true, outline: C.ink, shadow: C.red, align: 'center'});
+    T('INCRÍVEL...', 180 - j, 548, 3, C.gold, {bold: true, outline: C.ink, shadow: C.red, align: 'center'});
   }
   for (const c of cutsAt) if (f >= c && f < c + 5) { ctx.fillStyle = `rgba(255,246,226,${0.8 * (1 - (f - c) / 5)})`; ctx.fillRect(0, 0, UW, UH); }
   const fade = Math.max(0, (f - (S.end - 16)) / 16);

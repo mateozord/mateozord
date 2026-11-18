@@ -2,9 +2,14 @@
 // Same timing constants as src/timeline.ts (30 fps, 90 BPM => 20 frames per beat).
 import {writeFileSync, mkdirSync} from 'node:fs';
 
-const SR = 44100, FPS = 30, BEAT = 20, BAR = 80, TOTAL = 1580, O = 60;
-const S = {hook: 0, door: 60, transf: 220, mag: 380, wave: 540, plate: 700, mol: 860, metal: 1100, pop: 1260, outro: 1420, end: 1580};
-const POPS = [40, 1088], FORK = 1140, DING = [1380, 1390, 1400];
+const SR = 44100, FPS = 30, BEAT = 20, BAR = 80, TOTAL = 2300, O = 60;
+const S = {hook: 0, door: 60, transf: 300, mag: 540, wave: 780, plate: 1020, bag: 1260, kernel: 1500, popping: 1820, ding: 2000, outro: 2060, end: 2300};
+const KPOP = [40, 1800], DING = [2026, 2036, 2046];
+const BAGPOPS = [];
+for (let f = S.popping + 20, k = 0; f < S.ding - 16 && BAGPOPS.length < 18; f += 5, k++) {
+  const dens = Math.sin((Math.PI * (f - S.popping)) / (S.ding - S.popping));
+  if (((k * 7) % 10) / 10 < dens * 0.75) BAGPOPS.push(f);
+}
 
 const N = Math.round((TOTAL / FPS) * SR);
 const music = new Float32Array(N), drums = new Float32Array(N), mach = new Float32Array(N), plinks = new Float32Array(N);
@@ -102,14 +107,14 @@ for (let bar = -1; bar < (TOTAL - O) / BAR; bar++) {
 const sixteenth = BEAT / 4, swing = 0.028;
 for (let bar = 0; bar < (S.outro + BAR - O) / BAR; bar++) {
   const f0 = O + bar * BAR;
-  const breakdown = f0 === S.mol - BAR; // half-time bar before "o segredo"
+  const breakdown = f0 === S.kernel - BAR || f0 === S.popping - BAR; // half-time bars before the big moments
   for (let st = 0; st < 16; st++) if (!breakdown || st % 4 === 0) hat(f0 + st * sixteenth, st % 4 === 2 ? 0.11 : 0.06, st % 2 ? swing : 0);
   kick(drums, f0, 0.9);
   if (!breakdown) { kick(drums, f0 + BEAT * 2, 0.8); kick(drums, f0 + BEAT * 2.5, 0.45); snare(f0 + BEAT, 0.32); }
   snare(f0 + BEAT * 3, 0.32);
 }
 const crash = (f, a = 0.3) => { const s0 = fs(f); let hp = 0, prev = 0; for (let i = 0; i < SR * 1.2; i++) { const n = noise(); hp = 0.7 * (hp + n - prev); prev = n; add(drums, s0 + i, hp * a * Math.exp(-i / (SR * 0.35))); } };
-crash(S.door); crash(S.mol, 0.35); crash(S.metal, 0.3);
+crash(S.door); crash(S.kernel, 0.35); crash(S.popping, 0.3);
 // ---------- microwave foley ----------
 function zap(f, m, amp) {
   const s0 = fs(f), fr = mtof(m);
@@ -120,36 +125,34 @@ function zap(f, m, amp) {
   }
 }
 const popSnd = (f, a) => { const s0 = fs(f); let lp = 0; for (let i = 0; i < 6000; i++) { lp += 0.5 * (noise() - lp); add(mach, s0 + i, (lp * 1.2 * Math.exp(-i / 250) + Math.sin(2 * Math.PI * (180 - i * 0.02) * i / SR) * 0.6 * Math.exp(-i / 900)) * a); } };
-// hook: sizzle building, then the kernel POPs
-{ const a = fs(0), b = fs(POPS[0]); let hp = 0, prev = 0; for (let i = a; i < b; i++) { const n = noise(); hp = 0.85 * (hp + n - prev); prev = n; mach[i] += hp * 0.06 * ((i - a) / (b - a)); } }
-popSnd(POPS[0], 1.2);
-// door click, keypad beeps on 16ths, START
+const sizzle = (a0, b0, amp, curve = 1) => { const a = fs(a0), b = fs(b0); let hp = 0, prev = 0; for (let i = a; i < b; i++) { const n = noise(); hp = 0.85 * (hp + n - prev); prev = n; mach[i] += hp * amp * Math.pow((i - a) / (b - a), curve) * Math.min(1, (b - i) / 2000); } };
+// hook: sizzle then POP
+sizzle(0, KPOP[0], 0.06); popSnd(KPOP[0], 1.2);
+// door click + keypad: 3 : 0 0 START
 { const s0 = fs(70); for (let i = 0; i < 2500; i++) add(mach, s0 + i, noise() * 0.5 * Math.exp(-i / 200)); }
 for (const [f, m] of [[150, 88], [155, 91], [160, 93], [170, 96]]) beep(f, m, 0.08, 0.05);
-// running hum (120 Hz transformer buzz) + turntable motor + fan, while cooking
-{ const a = fs(180), b = fs(1400); let ph = 0, lp = 0;
+// running: 120 Hz transformer buzz + turntable + fan
+{ const a = fs(180), b = fs(S.ding + 26); let ph = 0, lp = 0;
   for (let i = a; i < b; i++) { const f = (i / SR) * FPS; ph += 2 * Math.PI * 120 / SR; lp += 0.04 * (noise() - lp);
-    const loud = f >= S.transf && f < S.mag ? 0.07 : f >= S.mol && f < S.metal ? 0.012 : 0.03;
-    mach[i] += (Math.tanh(Math.sin(ph) * 3) * loud + lp * 0.25) * Math.min(1, (i - a) / 4000, (b - i) / 4000); } }
-// transformer crackle on 8ths
-for (let f = S.transf + 10; f < S.mag; f += 10) { const s0 = fs(f); for (let i = 0; i < 400; i++) add(mach, s0 + i, noise() * 0.2 * Math.exp(-i / 60)); }
-// magnetron: electrons spinning = arpeggio on 16ths + high whine
-for (let f = S.mag, k = 0; f < S.wave; f += 5, k++) { const ch = CHORDS[(Math.floor((f - O) / BAR) + 4) % 4].slice(1); zap(f, ch[k % ch.length] + 24, 0.035); }
-{ const a = fs(S.mag), b = fs(S.wave); let ph = 0; for (let i = a; i < b; i++) { ph += 2 * Math.PI * 2450 / SR; mach[i] += Math.sin(ph) * 0.006 * Math.min(1, (i - a) / 8000, (b - i) / 8000); } }
-// waveguide: a "whoom" per launched wave (8ths), pentatonic
-for (let f = S.wave, k = 0; f < S.plate; f += 10, k++) plink(f, [69, 72, 74, 76, 79, 81][(k * 5) % 6], 0.08);
+    const loud = f >= S.transf && f < S.mag ? 0.07 : f >= S.bag && f < S.ding ? 0.012 : 0.03;
+    mach[i] += (Math.tanh(Math.sin(ph) * 3) * loud + lp * 0.22) * Math.min(1, (i - a) / 4000, (b - i) / 4000); } }
+for (let f = S.transf + 10; f < S.mag; f += 10) { const s0 = fs(f); for (let i = 0; i < 400; i++) add(mach, s0 + i, noise() * 0.18 * Math.exp(-i / 60)); }
+// magnetron arpeggio on 16ths
+for (let f = S.mag, k = 0; f < S.wave; f += 5, k++) { const ch = CHORDS[(Math.floor((f - O) / BAR) + 4) % 4].slice(1); zap(f, ch[k % ch.length] + 24, 0.032); }
+// wave fronts launched every 8th
+for (let f = S.wave, k = 0; f < S.plate; f += 10, k++) plink(f, [69, 72, 74, 76, 79, 81][(k * 5) % 6], 0.075);
 // hot spots: sizzle pulses on beats
-for (let f = S.plate; f < S.mol - BAR; f += BEAT) { const s0 = fs(f); let hp = 0, prev = 0; for (let i = 0; i < SR * 0.3; i++) { const n = noise(); hp = 0.9 * (hp + n - prev); prev = n; add(mach, s0 + i, hp * 0.08 * Math.exp(-i / (SR * 0.1))); } }
-sweep(mach, S.mol - 28, S.mol, 120, 1400, 0.22, 0.6);
-// molecules: each flip (8th) is a note; heat sizzle grows; steam hiss; POP
-{ const mel = [76, 74, 72, 69, 72, 74, 76, 79, 81, 79, 76, 74]; for (let f = S.mol, k = 0; f < POPS[1] - 4; f += 10, k++) plink(f, mel[k % mel.length], 0.13); }
-{ const a = fs(S.mol), b = fs(POPS[1]); let hp = 0, prev = 0; for (let i = a; i < b; i++) { const n = noise(); hp = 0.85 * (hp + n - prev); prev = n; mach[i] += hp * 0.05 * ((i - a) / (b - a)) ** 2; } }
-{ const a = fs(1040), b = fs(POPS[1]); let lp = 0; for (let i = a; i < b; i++) { lp += 0.4 * (noise() - lp); mach[i] += lp * 0.08 * ((i - a) / (b - a)); } }
-popSnd(POPS[1], 1.3);
-// fork sparks: zaps on 16ths (same pattern as the visuals)
-for (let f = FORK + 20, k = 4; f < S.pop - 10; f += 5, k++) if (k % 3 !== 0) { const s0 = fs(f); let hp = 0, prev = 0; for (let i = 0; i < 1800; i++) { const n = noise(); hp = 0.5 * (hp + n - prev); prev = n; add(mach, s0 + i, (hp * 0.35 + Math.sin(2 * Math.PI * 3200 * i / SR) * 0.08) * Math.exp(-i / 300)); } }
-// popcorn popping: quantized to 16ths, getting busier, then slowing
-for (let f = S.pop, k = 0; f < 1372; f += 5, k++) { const dens = Math.sin(Math.PI * (f - S.pop) / 112); if (((k * 7) % 10) / 10 < dens * 0.85) popSnd(f, 0.25 + 0.2 * ((k * 3) % 4) / 4); }
+for (let f = S.plate; f < S.bag; f += BEAT) { const s0 = fs(f); let hp = 0, prev = 0; for (let i = 0; i < SR * 0.3; i++) { const n = noise(); hp = 0.9 * (hp + n - prev); prev = n; add(mach, s0 + i, hp * 0.07 * Math.exp(-i / (SR * 0.1))); } }
+// bag: susceptor frying sizzle
+sizzle(S.bag + 100, S.kernel - 28, 0.06, 0.5);
+sweep(mach, S.kernel - 28, S.kernel, 120, 1400, 0.22, 0.6);
+// kernel: each water flip (8th) is a note; pressure builds; steam hiss; POP
+{ const mel = [76, 74, 72, 69, 72, 74, 76, 79, 81, 79, 76, 74]; for (let f = S.kernel, k = 0; f < KPOP[1] - 4; f += 10, k++) plink(f, mel[k % mel.length], 0.12); }
+sizzle(S.kernel, KPOP[1], 0.05, 2);
+{ const a = fs(S.kernel + 170), b = fs(KPOP[1]); let lp = 0; for (let i = a; i < b; i++) { lp += 0.4 * (noise() - lp); mach[i] += lp * 0.09 * ((i - a) / (b - a)); } }
+popSnd(KPOP[1], 1.3);
+// popping inside the bag: same 16th-note schedule as the visuals
+BAGPOPS.forEach((f, i) => popSnd(f, 0.3 + 0.15 * ((i * 3) % 4) / 4));
 DING.forEach((f, i) => beep(f, i === 2 ? 93 : 88, i === 2 ? 0.4 : 0.15, 0.06));
 // myth outro: soft wave whooshes
 for (let f = S.outro + 20; f < S.end - 40; f += 40) sweep(mach, f, f + 16, 300, 900, 0.08, 0.3);
