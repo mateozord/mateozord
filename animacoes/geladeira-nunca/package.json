@@ -1,0 +1,10 @@
+{
+  "name": "geladeira-nunca-video",
+  "private": true,
+  "scripts": {
+    "audio": "node scripts/gen-audio.mjs",
+    "studio": "remotion studio",
+    "check": "tsc --noEmit -p .",
+    "render": "npm run audio && remotion render GELADEIRA-NUNCA out/geladeira-nunca.mp4"
+  }
+}
