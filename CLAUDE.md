@@ -12,4 +12,4 @@ Preferência: respostas curtas, economizar tokens. Idioma: português.
 - Roda **na máquina local** (lê `~/.claude`), não na sessão cloud.
 - Instalação: `git clone ... && cd habblaud && npm install && npm run docker:up` (ou `npm run build && npm start`),
   depois `npm run mod:install`; abrir http://localhost:4747 e `/reload-plugins` nas sessões abertas.
-- Status: ainda não instalado no PC do usuário.
+- Status: instalado no PC do usuário (2026-11-18).
